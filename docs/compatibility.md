@@ -32,7 +32,7 @@ REDLINE ไม่ได้อ่านคำสั่งเฉพาะยี่
 
 ---
 
-**ยืนยันแล้ว:** Honda Civic e:HEV (2022+) · Toyota Hilux Revo (2019) · Mazda BT-50 (2021, 1.9 RZ4E)
+**ยืนยันแล้ว:** Honda Civic e:HEV (2022+) · Honda City (2012) · Toyota Hilux Revo (2019) · Mazda BT-50 (2021, 1.9 RZ4E) · มอเตอร์ไซค์ Honda X-ADV 750
 
 ## แยกตามยี่ห้อ
 
@@ -57,8 +57,9 @@ REDLINE ไม่ได้อ่านคำสั่งเฉพาะยี่
 | รุ่น (ปี / เครื่อง) | ผล | โปรโตคอล | ข้อสังเกต | มั่นใจ |
 |---|---|---|---|---|
 | **Honda Civic e:HEV (FE, 2022+)** | ✅ | CAN 500k | **ยืนยันแล้ว** ได้ค่าครบรวม HV BATT / HV POWER (หน้า PANEL HYB) ไม่มีค่าไอดี · ตั้ง GEAR OFF · ตอนวิ่งไฟฟ้าล้วนรอบเป็น 0 | ยืนยัน |
+| **Honda City (2012, GM2 1.5)** | ✅ | CAN 500k | **ยืนยันแล้ว** (ต.ค. 2026) มีผู้ใช้ลองแล้วใช้ได้ | ยืนยัน |
 | Honda City / HR-V / Accord **e:HEV** | 🟢 | CAN 500k | ระบบไฮบริดตระกูลเดียวกับ Civic e:HEV คาดว่าเหมือนกัน · ตั้ง GEAR OFF | กลาง–สูง |
-| Honda Civic FB / FC / FE (เครื่องยนต์), Accord, HR-V, CR-V, City / Jazz (2008+) | 🟢 | CAN 500k | มาตรฐาน | สูง |
+| Honda Civic FB / FC / FE (เครื่องยนต์), Accord, HR-V, CR-V, City / Jazz (2008+) | 🟢 | CAN 500k | มาตรฐาน · City 2012 ยืนยันแล้ว ปีอื่นควรได้เหมือนกัน | สูง |
 | Honda Civic FD (2006–2011) | 🟢 | CAN 29-bit | ELM327 ก๊อปเกรดต่ำบางตัวต้องลองหลายรอบ ([civinfo](https://www.civinfo.com/threads/obd2-and-torque.96748/)) | กลาง–สูง |
 | Honda City / Jazz GD (2003–2008) | 🟡 | K-Line (บางคันปลายรุ่นเป็น CAN) | ช้า ([fitfreak](https://www.fitfreak.net/forums/1st-generation-gd-01-08/93217-obd2-bluetooth-dongle-one-works.html)) | กลาง |
 
@@ -135,8 +136,9 @@ REDLINE ไม่ได้อ่านคำสั่งเฉพาะยี่
 
 | รุ่น | ผล | ข้อสังเกต |
 |---|---|---|
+| **Honda X-ADV 750** | ✅ โหมด **OBD BT** | **ยืนยันแล้ว** (ต.ค. 2026) มีผู้ใช้ลองแล้วใช้ได้ ต่อ ELM327 ผ่านสายแปลงปลั๊กวินิจฉัยของรถเป็น OBD 16 ขา · ยังไม่ทราบปีรถ |
 | Honda หัวฉีด ปลั๊กแดง 4 ขา (~2008–2018: CB500X/F, CBR500R, CBR250/300, CRF250L, MSX, PCX, Click i, Wave i) | 🟡 โหมด **HONDA K** (ทดลอง) | ไม่ใช่ OBD-II ต้องมีบอร์ดแปลง K-Line ต่อเข้า CYD (ดู README หัวข้อ Honda K-Line) · CB500X 2013–2018 เป็น K-Line ยืนยันจากเอกสาร · ยังไม่เคยลองกับ REDLINE บนรถจริง |
-| Honda ปี 2019+ (หลายรุ่นเป็น CAN) | ❌ | โหมด HONDA K อ่านไม่ได้ |
+| Honda ปี 2019+ (หลายรุ่นเป็น CAN) | ❌ HONDA K / 🟡 OBD BT | โหมด HONDA K อ่านไม่ได้ · รุ่นใหญ่บางรุ่นตอบ OBD มาตรฐานผ่าน ELM327 ได้ (เช่น X-ADV 750) แต่ยังไม่ยืนยันรุ่นอื่น |
 | Yamaha | ❌ (โหมด OBD) | โปรโตคอลเฉพาะยี่ห้อ เหมือนกัน |
 
 ## รถก่อนปี ~2007
