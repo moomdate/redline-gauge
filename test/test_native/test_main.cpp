@@ -660,47 +660,34 @@ static void test_honda_kline_frames() {
     TEST_ASSERT_EQUAL_HEX8(0x8C, hkChecksum(HK_PING, 3));
     TEST_ASSERT_EQUAL_HEX8(0x99, hkChecksum(HK_INIT, 4));
     uint8_t req[5];
-    hkTableRequest(0x11, req);
-    const uint8_t want11[] = { 0x72, 0x05, 0x71, 0x11, 0x07 };
-    TEST_ASSERT_EQUAL_HEX8_ARRAY(want11, req, 5);
-    hkTableRequest(0xD1, req);
-    TEST_ASSERT_EQUAL_HEX8(0x47, req[4]);
-    hkTableRequest(0x17, req);
-    TEST_ASSERT_EQUAL_HEX8(0x01, req[4]);
-    const uint8_t initReply[] = { 0x02, 0x04, 0x00, 0xFA };
-    TEST_ASSERT_TRUE(hkFrameOk(initReply, 4));
+    hkTableRequest(HK_TABLE, req);
+    const uint8_t want17[] = { 0x72, 0x05, 0x71, 0x17, 0x01 };
+    TEST_ASSERT_EQUAL_HEX8_ARRAY(want17, req, 5);
+    hkTableRequest(0x20, req);
+    TEST_ASSERT_EQUAL_HEX8(0xF8, req[4]);
+    const uint8_t pingReply[] = { 0x0E, 0x04, 0x72, 0x7C };
+    TEST_ASSERT_TRUE(hkFrameOk(pingReply, 4));
 
-    // table 0x11: 4500 rpm, TPS 80/1.6 = 50 %, ECT 0x82-40 = 90 C, IAT 0x46-40 = 30 C,
-    // MAP 100 kPa, FF FF, battery 0x8A = 13.8 V, 62 km/h, then injector/ignition/IACV filler
-    uint8_t f[25] = { 0x02, 0x19, 0x71, 0x11, 0x11, 0x94, 0x33, 0x50, 0x55, 0x82, 0x60, 0x46,
-                      0x99, 0x64, 0xFF, 0xFF, 0x8A, 0x3E, 0x01, 0x20, 0x90, 0x10, 0x00, 0x00, 0 };
-    f[24] = hkChecksum(f, 24);
-    HondaData d;
-    TEST_ASSERT_TRUE(hkDecodeMain(f, 25, 0x11, d));
-    TEST_ASSERT_EQUAL_FLOAT(4500, d.rpm);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 50, d.tps);
-    TEST_ASSERT_EQUAL_FLOAT(90, d.ect);
-    TEST_ASSERT_EQUAL_FLOAT(30, d.iat);
-    TEST_ASSERT_EQUAL_FLOAT(100, d.map);
-    TEST_ASSERT_FLOAT_WITHIN(0.01f, 13.8f, d.batt);
-    TEST_ASSERT_EQUAL_FLOAT(62, d.speed);
-    TEST_ASSERT_FALSE(hkDecodeMain(f, 25, 0x10, d));            // wrong table id
-    f[9] ^= 1;
-    TEST_ASSERT_FALSE(hkDecodeMain(f, 25, 0x11, d));            // bad checksum
-    // short layout (0x17): no FF FF pair, battery / speed two bytes earlier
-    uint8_t g[] = { 0x02, 0x13, 0x71, 0x17, 0x05, 0xDC, 0, 0, 0, 0x6E, 0, 0x50, 0, 0x64,
-                    0x7D, 0x28, 0, 0, 0 };
+    // table 0x17 (Wave): 1500 rpm, TPS 0x3C*0.5 = 30 %, temp 0x82-40 = 90 C, battery 0x7D = 12.5 V
+    uint8_t g[19] = { 0x02, 0x13, 0x71, 0x17, 0x05, 0xDC, 0x33, 0x3C, 0, 0, 0, 0x82, 0, 0,
+                      0x7D, 0x01, 0x20, 0x90, 0 };
     g[18] = hkChecksum(g, 18);
-    TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, 0x17, d));
+    HondaData d;
+    TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));
     TEST_ASSERT_EQUAL_FLOAT(1500, d.rpm);
-    TEST_ASSERT_EQUAL_FLOAT(70, d.ect);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 30, d.tps);
+    TEST_ASSERT_EQUAL_FLOAT(90, d.temp);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.5f, d.batt);
-    TEST_ASSERT_EQUAL_FLOAT(40, d.speed);
-    // 0xD1 neutral flag, logged frame from a CBR600RR / CRF250L
-    const uint8_t d1[] = { 0x02, 0x0B, 0x71, 0xD1, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0xAE };
-    bool neutral = false;
-    TEST_ASSERT_TRUE(hkDecodeNeutral(d1, sizeof d1, neutral));
-    TEST_ASSERT_TRUE(neutral);
+    g[7] = 0xFF; g[18] = hkChecksum(g, 18);
+    TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));
+    TEST_ASSERT_EQUAL_FLOAT(100, d.tps);                         // clamped
+    g[3] = 0x11; g[18] = hkChecksum(g, 18);
+    TEST_ASSERT_FALSE(hkDecodeMain(g, sizeof g, d));             // wrong table id
+    g[3] = 0x17; g[18] = hkChecksum(g, 18); g[9] ^= 1;
+    TEST_ASSERT_FALSE(hkDecodeMain(g, sizeof g, d));             // bad checksum
+    uint8_t s[] = { 0x02, 0x08, 0x71, 0x17, 0x05, 0xDC, 0x33, 0 };   // too short
+    s[7] = hkChecksum(s, 7);
+    TEST_ASSERT_FALSE(hkDecodeMain(s, sizeof s, d));
 }
 
 static void test_gear_estimate() {
@@ -917,8 +904,10 @@ static void test_settings_taps() {
     TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(260, 80, s));   // 3rd theme card
     TEST_ASSERT_EQUAL_UINT8(2, s.theme);
     TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(260, 80, s));      // same again: no-op
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(236, 163, s));  // CUSTOM source
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(203, 163, s));  // CUSTOM source
     TEST_ASSERT_EQUAL_UINT8(SRC_CUSTOM, s.source);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(300, 163, s));  // H TEST source
+    TEST_ASSERT_EQUAL_UINT8(SRC_HONDA_TEST, s.source);
     TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(280, 14, s));     // DONE
     TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(117, 229, s));
     TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(191, 229, s));  // PANELS cycles

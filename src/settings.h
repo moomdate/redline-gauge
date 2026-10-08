@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "config.h"
 
-enum SourceId : uint8_t { SRC_SIM_AUTO, SRC_SIM_TOUCH, SRC_SERIAL, SRC_OBD, SRC_CUSTOM, SRC_HONDA, SRC_COUNT };
+enum SourceId : uint8_t { SRC_SIM_AUTO, SRC_SIM_TOUCH, SRC_SERIAL, SRC_OBD, SRC_CUSTOM, SRC_HONDA, SRC_HONDA_TEST, SRC_COUNT };
 
 // Right-hand panels. AUTO = HYBRID as soon as the source delivers hybrid battery data
 // (e.g. OBD on a Civic e:HEV), otherwise STANDARD.

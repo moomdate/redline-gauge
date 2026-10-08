@@ -217,28 +217,29 @@ SETUP → **TIMER** (or `timer` over serial). Works with any source that deliver
 
 ## Honda motorcycles over K-line (HONDA K, experimental)
 
-SETUP → DATA SOURCE → **HONDA**, or `mode=honda`. This reads the ECU through the red 4-pin diagnostic connector
-of Honda PGM-FI bikes from about 2008 to 2018. Examples: CB500X/F, CBR500R, CBR250/300, CRF250L, MSX, PCX,
-Click i, Wave i. Bikes from 2019 on often use CAN instead, which this mode can't read.
+SETUP → DATA SOURCE → **HONDA**, or `mode=honda`. This reads the ECU of the **Honda Wave 110i / 125i**
+through its red 4-pin diagnostic connector. Other models may lay out the data differently.
 
 - **Hardware**: a K-line transceiver board between the bike and the CYD, either an L9637D board or an
   opto-isolated "K-line FTDI" board.
   - Car side: orange = K-line, green = GND, white/black = +12 V switched. Leave brown (SCS) unconnected.
-  - CYD side (CN1): board RX-out → **GPIO 27**, **GPIO 22** → board TX-in, VCC → **3.3 V** (never 5 V), GND.
+  - CYD side (CN1): board RX-out → **GPIO 22**, **GPIO 27** → board TX-in, VCC → **3.3 V** (never 5 V), GND.
     Pins: `KLINE_RX_PIN` / `KLINE_TX_PIN` in `config.h`.
-- **What it does**: wakes the ECU (K low 70 ms, high 120 ms), then sends `FE 04 72 8C` and `72 05 00 F0 99`.
-  It then polls the engine table (0x11, or 0x10 / 0x17) about 15 times a second, plus 0xD1 for neutral.
-- **Values**:
-  - RPM, speed, engine temp, intake temp, battery, throttle %.
-  - Neutral shows N. Other gears are estimated from rpm and speed, because the ECU doesn't send a gear number.
+- **What it does**: wakes the ECU (K low 70 ms, high 130 ms), sends `FE 04 72 8C` and `72 05 00 F0 99`,
+  then polls table 0x17 (`72 05 71 17 01`).
+- **Values**: RPM, throttle %, engine temp, battery. No speed or gear: the Wave's speedo is mechanical.
 - **Status bar**:
   - `K-LINE INIT` while connecting.
   - `NO K-LINE` when no echo came back: wiring or TX/RX swapped.
   - `NO ECU` when the wiring echoes but the ECU doesn't answer: ignition off, or a CAN bike.
+- **HONDA TEST** (SETUP → DATA SOURCE → **H TEST**, or `mode=hondatest`) helps find the bytes on a new
+  bike without a laptop. Same link and values, but every 5 s the **SPEED** slot shows a different raw byte of
+  table 0x17, named in the status bar: `A d[4]`, `B d[5]`, `C d[6]` … (one minute per round).
+  Ride or spin the wheel and note which letter follows the speedo. **INTAKE** shows d[5] − 40 next to
+  **COOLANT** d[7] − 40: whichever climbs to ~90 °C after a warm-up is the engine temperature.
 - **`kdump`** over serial prints every table raw once a second and marks the bytes that changed. Use it to
   check the byte layout on a new model: idle, then blip the throttle.
-- Experimental: the protocol and table 0x11 layout come from published logs (HondaECU, CRF250L, CBR600RR).
-  It has not been run on a bike with REDLINE yet. Please report results.
+- Experimental: it has not been run on a bike with REDLINE yet. Please report results.
 
 ## Motorcycles (e.g. Honda Wave)
 OBD BT does **not** work on Honda bikes: their 4-pin DLC speaks Honda's own K-Line protocol, not car OBD-II.

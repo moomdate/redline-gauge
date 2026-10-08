@@ -147,6 +147,7 @@ int main() {
     staticFrame("out/hybrid_regen.ppm", 1250, 63, 88, 12.4f, 35, -1, Link::Live, "", "OBD BT");
     g_soc = -1; g_gearOff = false;
     gauge_ui::setTheme(kThemes[THEME_AMBER]);
+    staticFrame("out/hondatest.ppm", 1400, 72, 90, 13.8f, 31, -1, Link::Live, "M d[15]", "HONDA TEST");
     staticFrame("out/nodata.ppm", -1, -1, -100, -1, -100, -1, Link::Connecting, "BT PAIRING", "OBD BT");
 
     // ---- run the AUTO simulator for 150 s of virtual time ----

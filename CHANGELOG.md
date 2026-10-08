@@ -4,6 +4,25 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.6.6] - 2026-10-08
+
+### Changed
+- **HONDA K now targets the Honda Wave 110i / 125i** (red 4-pin connector).
+  - **Wiring changed: K-line board RX-out → GPIO 22, GPIO 27 → board TX-in** (swapped from earlier builds).
+    Wiring diagrams updated.
+  - Wake 70 ms low / 130 ms high, ping + init, then table 0x17 only. The ECU must answer the ping or the init;
+    the transceiver's echo alone no longer counts as connected.
+  - Shows RPM, throttle, engine temp (d[7]) and battery. No speed or gear: the Wave's speedo is cable-driven.
+
+### Added
+- **SETUP → DATA SOURCE → H TEST** (`mode=hondatest`): finds the bytes on a new bike without a laptop.
+  - Every 5 s the SPEED slot shows a different raw byte of table 0x17, named big in place of the voltage panel
+    (`SPEED TEST A` / `d[4]`, then `B` / `d[5]` …). Note which one follows the speedo.
+  - INTAKE shows d[5] − 40 next to COOLANT d[7] − 40, to tell engine temp from intake temp.
+- **`klineinvert=on|off`** for opto-isolated K-line boards that invert the line (saved).
+- **`examples/HondaEcuSim`**: an Arduino / ESP32 sketch that pretends to be a Wave ECU, to bench-test HONDA K.
+- K-line wiring diagrams: Honda 4-pin → board → CYD, a DIY 2×PC817 opto interface, and an MC33660 interface.
+
 ## [1.6.5] - 2026-10-06
 
 ### Added

@@ -2,7 +2,7 @@
 <rect width="1200" height="760" fill="#0b0f13"/><rect x="32" y="32" width="1136" height="696" rx="16" fill="url(#g)" stroke="#27333c" stroke-width="2"/>
 <path d="M32 108V48q0-16 16-16h250" fill="none" stroke="#ff8a00" stroke-width="5"/>
 <text x="64" y="82" fill="white" font-size="34" class="t">HONDA 4-PIN DIAG → K-LINE BOARD → CYD (HONDA K MODE)</text>
-<text x="64" y="110" class="muted" font-size="18">PGM-FI bikes ~2008-2018 (CB500X/F, CBR250/300/500, CRF250L, MSX, PCX, Click i, Wave i) · 2019+ CAN bikes: not supported</text>
+<text x="64" y="110" class="muted" font-size="18">Honda Wave 110i / 125i (red 4-pin diagnostic connector) · other models may lay out data differently</text>
 
 <!-- Honda connector -->
 <rect x="64" y="160" width="230" height="300" rx="16" fill="#3a0f12" stroke="#ff3b3b" stroke-width="3"/>
@@ -41,8 +41,8 @@
 <rect x="880" y="160" width="250" height="300" rx="18" fill="#5d5200" stroke="#ffc400" stroke-width="3"/>
 <text class="m" x="904" y="194" fill="white" font-size="16">CYD  CN1</text>
 <text class="m" x="904" y="216" fill="#e8dc8a" font-size="13">ESP32-2432S028R</text>
-<text class="m" x="904" y="245" fill="#b6ff00" font-size="16">GPIO 27  (RX)</text>
-<text class="m" x="904" y="305" fill="#4fd2ff" font-size="16">GPIO 22  (TX)</text>
+<text class="m" x="904" y="245" fill="#b6ff00" font-size="16">GPIO 22  (RX)</text>
+<text class="m" x="904" y="305" fill="#4fd2ff" font-size="16">GPIO 27  (TX)</text>
 <text class="m" x="904" y="365" fill="#ffc400" font-size="16">3.3 V</text>
 <text class="m" x="904" y="425" fill="white" font-size="16">GND</text>
 <rect x="872" y="232" width="16" height="16" fill="#b6ff00"/><rect x="872" y="292" width="16" height="16" fill="#4fd2ff"/><rect x="872" y="352" width="16" height="16" fill="#ffc400"/><rect x="872" y="412" width="16" height="16" fill="#9aa5ae"/>
@@ -69,6 +69,6 @@
 <text class="m muted" x="84" y="680" font-size="12">Isolated board: keep bike GND and CYD GND apart</text>
 <rect class="b" x="860" y="600" width="270" height="90" rx="12"/>
 <text class="m" x="880" y="628" fill="#2eff6e" font-size="14">10400 baud · 1 wire</text>
-<text class="m" x="880" y="652" fill="white" font-size="13">wake 70 ms low / 120 ms high</text>
-<text class="m" x="880" y="674" fill="white" font-size="13">then table 0x11 ~15 Hz</text>
+<text class="m" x="880" y="652" fill="white" font-size="13">wake 70 ms low / 130 ms high</text>
+<text class="m" x="880" y="674" fill="white" font-size="13">then table 0x17</text>
 </svg>

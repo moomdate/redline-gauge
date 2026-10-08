@@ -6,15 +6,15 @@
 //   [addr][len incl. checksum][service][data...][checksum]
 //   request addr 0x72 (ping 0xFE), reply addr 0x02 (ping reply 0x0E)
 //   checksum: all bytes of the frame sum to 0 (mod 256)
-// Session: wake pulse (K low 70 ms, high 120 ms) -> ping FE 04 72 8C (-> 0E 04 72 7C)
-//          -> init 72 05 00 F0 99 (-> 02 04 00 FA) -> table reads 72 05 71 <t> <cs>.
-// Sources: HondaECU / eculib (honda.py, frames/data.py), andreibaw/Honda_K-Line_KWP2000,
-// sophienyaa/Honda-Motorcycle-ECU-Tools (CRF250L logs), gonzos.net CTX700 project.
+// Session (Wave 110i / 125i): wake pulse (K low 70 ms, high 130 ms) -> ping FE 04 72 8C
+//   (-> 0E 04 72 7C) -> init 72 05 00 F0 99 (-> 02 04 00 FA; some ECUs stay quiet)
+//   -> poll table 0x17: 72 05 71 17 01
 #include <stdint.h>
 #include <stddef.h>
 
 static const uint8_t HK_PING[] = { 0xFE, 0x04, 0x72, 0x8C };
 static const uint8_t HK_INIT[] = { 0x72, 0x05, 0x00, 0xF0, 0x99 };
+static const uint8_t HK_TABLE = 0x17;
 
 inline uint8_t hkChecksum(const uint8_t *b, size_t n) {
     uint8_t s = 0;
@@ -41,35 +41,21 @@ inline bool hkIsTableReply(const uint8_t *f, size_t n, uint8_t table) {
     return hkFrameOk(f, n) && n >= 5 && f[0] == 0x02 && f[2] == 0x71 && f[3] == table;
 }
 
+// Only what the gauge shows; the bike's speedo is mechanical, the ECU has no speed.
 struct HondaData {
-    float rpm, tps, ect, iat, map, batt, speed;
+    float rpm, tps, temp, batt;
 };
 
-// Main engine table. 0x10 / 0x11 (2008+ Keihin ECUs, the 500 twins included):
-//   [0-1] rpm  [2] TPS V  [3] TPS %*1.6  [4] ECT V  [5] ECT+40  [6] IAT V  [7] IAT+40
-//   [8] MAP V  [9] MAP kPa  [10-11] (FF FF)  [12] battery V*10  [13] speed km/h ...
-// 0x13 / 0x17 are the same without the FF FF pair (battery at [10], speed at [11]).
-inline bool hkDecodeMain(const uint8_t *f, size_t n, uint8_t table, HondaData &d) {
-    if (!hkIsTableReply(f, n, table)) return false;
+// Table 0x17 on the Wave 110i / 125i ECU (payload = bytes after 02 <len> 71 17):
+//   [0-1] rpm  [2] TPS V*256/5  [3] TPS %*2  [7] engine temp +40  [10] battery V*10
+//   [11-12] injector  [13] ignition   (the last two are not used)
+inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) {
+    if (!hkIsTableReply(f, n, HK_TABLE) || n < 4 + 14 + 1) return false;   // 14 data bytes + checksum
     const uint8_t *p = f + 4;
-    size_t pn = n - 5;
-    bool shortLayout = table == 0x13 || table == 0x17;
-    size_t iBatt = shortLayout ? 10 : 12, iSpeed = iBatt + 1;
-    if (pn <= iSpeed) return false;
     d.rpm = (float)(p[0] << 8 | p[1]);
-    d.tps = p[3] / 1.6f;
+    d.tps = p[3] * 0.5f;
     if (d.tps > 100) d.tps = 100;
-    d.ect = p[5] - 40.0f;
-    d.iat = p[7] - 40.0f;
-    d.map = p[9];
-    d.batt = p[iBatt] / 10.0f;
-    d.speed = p[iSpeed];
-    return true;
-}
-
-// Table 0xD1: payload[0] = 0x01 neutral (or clutch pulled), 0x00 in gear, 0x03 side stand down.
-inline bool hkDecodeNeutral(const uint8_t *f, size_t n, bool &neutral) {
-    if (!hkIsTableReply(f, n, 0xD1) || n < 6) return false;
-    neutral = f[4] & 0x01;
+    d.temp = p[7] - 40.0f;
+    d.batt = p[10] / 10.0f;
     return true;
 }

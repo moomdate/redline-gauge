@@ -43,7 +43,8 @@ static SerialSource serialSrc;
 static ObdSource    obdSrc;
 static CustomSource customSrc;
 static HondaKSource hondaSrc;
-static DataSource *const sources[SRC_COUNT] = { &simAuto, &simTouch, &serialSrc, &obdSrc, &customSrc, &hondaSrc };
+static HondaKSource hondaTest(true);
+static DataSource *const sources[SRC_COUNT] = { &simAuto, &simTouch, &serialSrc, &obdSrc, &customSrc, &hondaSrc, &hondaTest };
 
 static volatile int requestedSrc = SRC_SIM_AUTO;
 static volatile int activeSrc = -1;
@@ -110,7 +111,7 @@ static GaugeModel model;
 static void printHelp() {
     Serial.println(F(
         "\n=== REDLINE " REDLINE_VERSION " — crafted by birdlab.th (birdlab.moomdate.tech) ===\n"
-        "  mode=sim|touch|serial|obd|custom|honda   theme=ice|lime|amber   shift=7000\n"
+        "  mode=sim|touch|serial|obd|custom|honda|hondatest   theme=ice|lime|amber   shift=7000\n"
         "  bright=20..100   beep=on|off   peak=reset   help\n"
         "  panels=auto|standard|hybrid   gearmode=auto|off   invert=on|off (panel colours)\n"
         "  timer   timerlog   timerlog=clear   kdump (HONDA K raw tables)   klineinvert=on|off\n"
@@ -144,7 +145,7 @@ static void handleLine(char *line) {
     bool changed = true;
 
     if (keyIs(p, "mode", &v)) {
-        static const char *const keys[SRC_COUNT] = { "sim", "touch", "serial", "obd", "custom", "honda" };
+        static const char *const keys[SRC_COUNT] = { "sim", "touch", "serial", "obd", "custom", "honda", "hondatest" };
         int found = -1;
         for (int i = 0; i < SRC_COUNT; i++) if (!strncasecmp(v, keys[i], strlen(keys[i]))) found = i;
         if (!strncasecmp(v, "auto", 4)) found = SRC_SIM_AUTO;
@@ -204,7 +205,7 @@ static void handleLine(char *line) {
     } else if (!strncasecmp(p, "kdump", 5)) {
         HondaKSource::dumpOn = !HondaKSource::dumpOn;
         Serial.printf("[gauge] K-line table dump %s%s\n", HondaKSource::dumpOn ? "ON" : "OFF",
-                      activeSrc == SRC_HONDA ? "" : " (needs mode=honda)");
+                      activeSrc == SRC_HONDA || activeSrc == SRC_HONDA_TEST ? "" : " (needs mode=honda)");
         return;
     } else if (!strncasecmp(p, "bench", 5)) {
         runBench();

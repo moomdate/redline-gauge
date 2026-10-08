@@ -3,6 +3,7 @@
 #include "settings.h"
 #include <math.h>
 #include <stdio.h>
+#include <string.h>
 
 // Signed age: a sample the data core published a moment AFTER `now` was read is fresh
 // (unsigned maths called it 49 days old and blanked the value for one frame).
@@ -125,6 +126,14 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
         case Link::Connecting:v.dotColor = 0xf5df3c; v.dotOn = slow; break;
         case Link::Error:     v.dotColor = 0xff4741; v.dotOn = true; break;
         default:              v.dotColor = 0x6c7a84; v.dotOn = true; break;
+    }
+    v.testTag[0] = 0;
+    v.testLetter = 0;
+    int idx;
+    char letter;
+    if (modeName && !strcmp(modeName, "HONDA TEST") && sscanf(s.linkMsg, "%c d[%d]", &letter, &idx) == 2) {
+        snprintf(v.testTag, sizeof v.testTag, "d[%d]", idx);
+        v.testLetter = letter;
     }
     if (s.linkMsg[0]) {
         snprintf(v.right, sizeof(v.right), "%s", s.linkMsg);

@@ -1,11 +1,11 @@
 #pragma once
-// Honda motorcycles with the red 4-pin diagnostic connector (K-line, roughly 2008-2018
-// PGM-FI bikes: CB/CBR500, CBR250/300, CRF250L, MSX, PCX, Wave/Click i ...) through a
-// K-line transceiver board (L9637D or an opto-isolated "K-line FTDI" board) on CN1:
-//   transceiver RX-out -> GPIO 27      CYD GPIO 22 -> transceiver TX-in
-//   logic VCC <- 3.3 V (never 5 V on GPIO 27)    car side: K-line, GND, +12 V switched
+// Honda Wave 110i / 125i (red 4-pin diagnostic connector, K-line) through a K-line
+// transceiver board (L9637D / MC33660 / opto) on CN1:
+//   transceiver RX-out -> GPIO 22      CYD GPIO 27 -> transceiver TX-in
+//   logic VCC <- 3.3 V (never 5 V on GPIO 22)    bike side: K-line, GND, +12 V switched
 // Same blocking state machine style as ObdSource:
-//   wake pulse -> ping -> init -> find the engine table (0x11 / 0x10 / 0x17) -> poll it
+//   wake pulse -> ping -> init -> poll table 0x17
+// Shows rpm, throttle, engine temp and battery; the Wave has no ECU speed.
 // Serial `kdump` toggles a raw dump of every known table once a second (with the bytes
 // that changed marked) so table offsets can be checked on a new model.
 #include "data/source.h"
@@ -13,7 +13,11 @@
 
 class HondaKSource : public DataSource {
 public:
-    const char *name() const override { return "HONDA K"; }
+    // test = HONDA TEST: same link, but every 5 s the SPEED slot shows a different raw byte of
+    // table 0x17 (status bar "A d[4]", "B d[5]" ...) so a tester can say which one is speed;
+    // INTAKE shows d[5]-40 next to COOLANT d[7]-40 to tell the two temperatures apart.
+    explicit HondaKSource(bool test = false) : test_(test) {}
+    const char *name() const override { return test_ ? "HONDA TEST" : "HONDA K"; }
     void begin() override;
     void end() override;
     void poll() override;
@@ -26,17 +30,19 @@ public:
     static bool invert();
 
 private:
-    enum State : uint8_t { S_WAKE, S_INIT, S_PROBE, S_RUN, S_WAIT };
+    enum State : uint8_t { S_WAKE, S_RUN, S_WAIT };
     State    state_ = S_WAKE, after_ = S_WAKE;
     uint32_t waitUntil_ = 0, lastDump_ = 0;
-    uint8_t  table_ = 0x11;            // engine table this ECU answers
-    uint8_t  errors_ = 0, cycle_ = 0, fails_ = 0;
+    uint8_t  errors_ = 0;
     bool     sawEcho_ = false;
+    const bool test_;
+    int8_t   testStep_ = -1;           // candidate shown last (-1 = none yet)
     uint8_t  resp_[64];
     uint8_t  respLen_ = 0;
 
     void retryIn(uint32_t ms, State then, const char *msg);
-    void wake();
+    bool wake();                       // pulse + ping + init; true when the ECU answered
     bool transact(const uint8_t *req, uint8_t n, uint32_t timeoutMs = 150);
     void dump();
+    void publishTest();
 };

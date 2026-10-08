@@ -10,7 +10,7 @@
 
 namespace settings_ui {
 
-const char *const kSourceLabels[SRC_COUNT] = { "SIM", "TOUCH", "SERIAL", "OBD BT", "CUSTOM", "HONDA" };
+const char *const kSourceLabels[SRC_COUNT] = { "SIM", "TOUCH", "SERIAL", "OBD BT", "CUSTOM", "HONDA", "H TEST" };
 
 // ---- layout ----------------------------------------------------------------------
 struct Rect { int x, y, w, h; };
@@ -23,7 +23,7 @@ static const Rect R_DONE = { 250, 4, 64, 22 };
 static const Rect R_TIMER = { 178, 4, 66, 22 };   // drag timer screen
 static const Rect R_COLORS = { 102, 4, 72, 22 };  // flip panel colour inversion
 static Rect themeCard(int i)  { return { 8 + i * 104, 46, 96, 72 }; }
-static Rect sourceBtn(int i)  { return { 8 + i * 51, 152, 49, 22 }; }
+static Rect sourceBtn(int i)  { return { 6 + i * 44, 152, 42, 22 }; }
 static const Rect R_SHIFT_DN = {   8, 194, 26, 22 };
 static const Rect R_SHIFT_V  = {  36, 194, 78, 22 };
 static const Rect R_SHIFT_UP = { 116, 194, 26, 22 };

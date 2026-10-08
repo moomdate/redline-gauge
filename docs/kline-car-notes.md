@@ -31,7 +31,7 @@ https://github.com/muki01/OBD2_KLine_Library
 
 ## Plan for REDLINE
 
-- Use the same transceiver board and pins as HONDA K (GPIO 27 RX / GPIO 22 TX, 3.3 V logic). Reuse `HondaKSource`'s
+- Use the same transceiver board and pins as HONDA K (GPIO 22 RX / GPIO 27 TX, 3.3 V logic). Reuse `HondaKSource`'s
   `wake()` / `transact()` / echo skip and the `ownsUart` hand-off.
 - Init:
   - 5-baud `0x33`: bit-bang TX at 200 ms/bit, read `55 KW1 KW2`, send `~KW2` after 25–50 ms, expect `~0x33`.

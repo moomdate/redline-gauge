@@ -30,6 +30,10 @@ struct GaugeView {
     bool  kwValid;    float kw;
     bool  blink;         // shared slow blink phase for critical values
 
+    // HONDA TEST: the raw byte now on SPEED, shown big in place of the voltage panel
+    char  testTag[8];    // "d[13]", "" = not testing
+    char  testLetter;    // 'A', 'B' ...
+
     // status bar
     Link        link;
     const char *mode;

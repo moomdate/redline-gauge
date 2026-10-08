@@ -33,7 +33,7 @@ void HondaKSource::begin() {
     if (p.begin("kline", false)) { s_invert = p.getBool("inv", KLINE_INVERT); p.end(); }
     delay(20);                         // let a poll in progress on the other core finish
     state_ = S_WAKE;
-    errors_ = fails_ = cycle_ = 0;
+    errors_ = 0;
     sawEcho_ = false;
     bus::setLink(Link::Connecting, "K-LINE INIT");
 }
@@ -49,8 +49,10 @@ void HondaKSource::end() {
     ownsUart = false;
 }
 
-// Wake-up: K-line low 70 ms, high 120 ms (a long "break" the UART can't produce on its own)
-void HondaKSource::wake() {
+// Wake-up: K-line low 70 ms, high 130 ms (a long "break" the UART can't produce on its own),
+// then ping and init. Connected = the ECU answered at least one of them with a valid frame
+// (the transceiver's echo alone doesn't count: it comes back even with the ignition off).
+bool HondaKSource::wake() {
     K.end();
     // "K low" is TX low on a normal transceiver, TX high through an inverting opto stage
     uint8_t kLow = s_invert ? HIGH : LOW, kHigh = s_invert ? LOW : HIGH;
@@ -58,9 +60,13 @@ void HondaKSource::wake() {
     digitalWrite(KLINE_TX_PIN, kLow);
     delay(70);
     digitalWrite(KLINE_TX_PIN, kHigh);
-    delay(120);
+    delay(130);
     K.begin(10400, SERIAL_8N1, KLINE_RX_PIN, KLINE_TX_PIN, s_invert);
     while (K.available()) K.read();
+    bool ping = transact(HK_PING, sizeof HK_PING, 200) && resp_[0] == 0x0E;
+    bool init = transact(HK_INIT, sizeof HK_INIT, 300) && resp_[0] == 0x02;
+    Serial.printf("[honda] ping %s, init %s\n", ping ? "OK" : "no reply", init ? "OK" : "no reply");
+    return ping || init;
 }
 
 static bool readByte(uint8_t &b, uint32_t until) {
@@ -106,77 +112,68 @@ void HondaKSource::poll() {
 
     case S_WAKE:
         bus::setLink(Link::Connecting, "K-LINE INIT");
-        wake();
-        transact(HK_PING, sizeof HK_PING, 100);        // answer optional, some ECUs stay quiet
-        state_ = S_INIT;
-        break;
-
-    case S_INIT:
-        if (transact(HK_INIT, sizeof HK_INIT, 300) && resp_[0] == 0x02) {
-            Serial.println("[honda] ECU answered init");
-            fails_ = 0;
-            state_ = S_PROBE;
+        sawEcho_ = false;
+        if (wake()) {
+            errors_ = 0;
+            state_ = S_RUN;
         } else {
-            fails_++;
-            Serial.printf("[honda] no init reply (%s)\n",
-                          sawEcho_ ? "echo OK: wiring fine, ignition ON? 2019+ bikes are CAN"
+            Serial.printf("[honda] ECU didn't answer (%s)\n",
+                          sawEcho_ ? "echo OK: wiring fine, ignition ON?"
                                    : "no echo: check TX/RX swap, 3.3 V, 12 V on the board");
-            retryIn(fails_ < 3 ? 1000 : 3000, S_WAKE, sawEcho_ ? "NO ECU" : "NO K-LINE");
+            retryIn(2500, S_WAKE, sawEcho_ ? "NO ECU" : "NO K-LINE");
         }
         break;
-
-    case S_PROBE: {
-        static const uint8_t candidates[] = { 0x11, 0x10, 0x17, 0x13 };
-        for (uint8_t t : candidates) {
-            uint8_t req[5];
-            hkTableRequest(t, req);
-            HondaData d;
-            if (transact(req, 5) && hkDecodeMain(resp_, respLen_, t, d)) {
-                table_ = t;
-                Serial.printf("[honda] engine table 0x%02X (%u bytes), streaming\n", t, respLen_);
-                bus::setLink(Link::Live, "");
-                errors_ = 0;
-                state_ = S_RUN;
-                return;
-            }
-            delay(30);
-        }
-        retryIn(2000, S_WAKE, "NO TABLE");
-        break;
-    }
 
     case S_RUN: {
         if (dumpOn && millis() - lastDump_ >= 1000) { dump(); lastDump_ = millis(); }
         uint8_t req[5];
-        bool neutralTurn = (++cycle_ & 3) == 0;            // 0xD1 every 4th request
-        hkTableRequest(neutralTurn ? 0xD1 : table_, req);
-        bool ok = transact(req, 5);
-        if (ok && !neutralTurn) {
-            HondaData d;
-            ok = hkDecodeMain(resp_, respLen_, table_, d);
-            if (ok) {
-                bus::publish(CH_RPM, d.rpm);
-                bus::publish(CH_SPEED, d.speed);
-                bus::publish(CH_COOLANT, d.ect);
-                bus::publish(CH_IAT, d.iat);
-                bus::publish(CH_VOLTAGE, d.batt);
-                bus::publish(CH_THROTTLE, d.tps);
-            }
-        } else if (ok) {
-            bool neutral;
-            // no gear number on the bus: publish N in neutral, else let the UI estimate it
-            if (hkDecodeNeutral(resp_, respLen_, neutral) && neutral) bus::publish(CH_GEAR, 0);
-        }
-        if (ok) {
+        hkTableRequest(HK_TABLE, req);
+        HondaData d;
+        if (test_ && transact(req, 5, 120) && hkIsTableReply(resp_, respLen_, HK_TABLE)) {
+            publishTest();
+            errors_ = 0;
+        } else if (!test_ && transact(req, 5, 120) && hkDecodeMain(resp_, respLen_, d)) {
+            bus::publish(CH_RPM, d.rpm);
+            bus::publish(CH_THROTTLE, d.tps);
+            bus::publish(CH_COOLANT, d.temp);
+            bus::publish(CH_VOLTAGE, d.batt);
             errors_ = 0;
             bus::setLink(Link::Live, "");
-        } else if (++errors_ >= 3) {
-            Serial.println("[honda] ECU stopped answering, waking it again");
-            retryIn(500, S_WAKE, "ECU LOST");
+        } else if (++errors_ >= 5) {
+            Serial.printf("[honda] no table 0x17 reply (%s), connecting again\n",
+                          sawEcho_ ? "echo OK: wiring fine, ignition ON?" : "no echo: check TX/RX swap");
+            retryIn(3000, S_WAKE, sawEcho_ ? "NO ECU" : "NO K-LINE");
         }
-        delay(15);
+        delay(20);
         break;
     }
+    }
+}
+
+// HONDA TEST: the known values as usual, plus one candidate byte (d[4], d[5] ... in turn,
+// 5 s each) on SPEED, labelled A, B, C ... in the status bar and on serial.
+void HondaKSource::publishTest() {
+    const uint8_t *p = resp_ + 4;
+    int pn = respLen_ - 5;                            // data bytes (without the checksum)
+    if (pn >= 2) bus::publish(CH_RPM, (float)(p[0] << 8 | p[1]));
+    if (pn > 3) bus::publish(CH_THROTTLE, p[3] * 0.5f > 100 ? 100 : p[3] * 0.5f);
+    if (pn > 5) bus::publish(CH_IAT, p[5] - 40.0f);
+    if (pn > 7) bus::publish(CH_COOLANT, p[7] - 40.0f);
+    if (pn > 10) bus::publish(CH_VOLTAGE, p[10] / 10.0f);
+
+    const int first = 4;                              // candidates: d[4] .. last data byte
+    int count = pn - first;
+    if (count <= 0) { bus::setLink(Link::Live, "SHORT"); return; }
+    if (count > 26) count = 26;
+    int step = (int)((millis() / 5000) % count);
+    int idx = first + step;
+    bus::publish(CH_SPEED, p[idx]);
+    char msg[12];
+    snprintf(msg, sizeof msg, "%c d[%d]", 'A' + step, idx);
+    bus::setLink(Link::Live, msg);
+    if (step != testStep_) {
+        testStep_ = step;
+        Serial.printf("[htest] %s on SPEED (len %d)\n", msg, pn);
     }
 }
 

@@ -4,6 +4,7 @@
 |---|---|
 | [`SerialSenderDemo`](SerialSenderDemo/SerialSenderDemo.ino) | Animated test values, no sensors. **Start here** to check the wiring |
 | [`SerialSenderSensors`](SerialSenderSensors/SerialSenderSensors.ino) | Real sensors on an Uno/Nano: RPM (ignition pulse), speed (VSS), battery, coolant/oil NTC, intake NTC |
+| [`HondaEcuSim`](HondaEcuSim/HondaEcuSim.ino) | Pretends to be a Honda Wave ECU on the K-line, to bench-test **HONDA K** mode (see [below](#hondaecusim-bench-test-honda-k)) |
 
 Both are plain Arduino sketches: open them in the Arduino IDE, or build with PlatformIO
 (`pio ci --board uno examples/SerialSenderDemo/SerialSenderDemo.ino`).
@@ -59,6 +60,22 @@ rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
 - `mode=serial` switches the gauge to the SERIAL source. Both sketches send it once at start-up.
   Other commands work as well: `theme=lime`, `shift=6500`, `peak=reset`.
 
+## HondaEcuSim: bench-test HONDA K
+
+Answers the gauge's K-line ping, init and table 0x17 with animated rpm / throttle / engine temp / battery,
+at 10400 baud. No K-line board needed: wire the two UARTs directly.
+
+```
+ sim TX ──(1k/2k divider on 5 V boards)──► CYD GPIO 22   (K-line RX)
+ sim RX ◄──────────────────────────────── CYD GPIO 27   (K-line TX)
+ GND ──────────────────────────────────── GND
+```
+
+- ESP32: Serial2 on GPIO 16 (RX) / 17 (TX), log on USB. Uno / Nano: D0 / D1 (close the Serial Monitor).
+  Mega / Leonardo: Serial1.
+- On the gauge: SETUP → DATA SOURCE → **HONDA** (or `mode=honda`), `klineinvert=off`.
+- It echoes every byte like the real single wire; `ECHO 0` in the sketch turns that off.
+
 ---
 
 # ภาษาไทย: ใช้ Arduino ส่งค่าเข้า REDLINE ผ่าน Serial
@@ -67,6 +84,7 @@ rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
 |---|---|
 | `SerialSenderDemo` | ส่งค่าทดสอบวิ่งขึ้นลง ไม่ต้องต่อเซ็นเซอร์ **ใช้ลองว่าต่อสายถูกไหมก่อน** |
 | `SerialSenderSensors` | อ่านเซ็นเซอร์จริงด้วย Uno/Nano: รอบ (พัลส์จุดระเบิด), ความเร็ว, แบต, อุณหภูมิ NTC |
+| `HondaEcuSim` | จำลองเป็นกล่อง ECU ของ Wave บนสาย K-line ใช้ทดสอบโหมด **HONDA K** บนโต๊ะ ไม่ต้องมีรถ |
 
 ## ต่อสาย
 
@@ -89,3 +107,12 @@ rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
 - `PULSES_PER_REV`: จำนวนพัลส์ต่อรอบเครื่อง (รถ 4 สูบ = 2, มอเตอร์ไซค์สูบเดียวอย่าง Wave ส่วนใหญ่ = 1)
 - `WHEEL_CIRCUMFERENCE_M`: เส้นรอบวงล้อ (รถเก๋ง ≈ 1.94 ม., Wave ขอบ 17 ≈ 1.75 ม.)
 - ⚠️ สัญญาณรอบต้องผ่าน **opto-coupler (PC817)** เสมอ ห้ามต่อสายคอยล์เข้าบอร์ดตรงๆ
+
+## HondaEcuSim: ทดสอบโหมด HONDA K โดยไม่ต้องมีรถ
+- ตอบ ping, init และตาราง 0x17 ด้วยค่ารอบ / คันเร่ง / ความร้อน / แบต ที่ขยับเอง (10400 baud)
+- ไม่ต้องใช้บอร์ด K-line ต่อ UART ตรง:
+  - **TX ของบอร์ดจำลอง → GPIO 22** ของ CYD (บอร์ด 5V ต้องมีตัวแบ่งแรงดัน 1k/2k)
+  - **GPIO 27** ของ CYD → **RX ของบอร์ดจำลอง**
+  - GND → GND
+- ESP32 ใช้ขา 16 (RX) / 17 (TX) · Uno/Nano ใช้ D0/D1 (ปิด Serial Monitor ก่อน) · Mega/Leonardo ใช้ Serial1
+- ที่ CYD: SETUP → DATA SOURCE → **HONDA** และ `klineinvert=off`
