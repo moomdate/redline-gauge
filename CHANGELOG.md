@@ -4,6 +4,19 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.6.7] - 2026-10-09
+
+### Added
+- **Touch calibration on the board**, no coding or extra firmware: press the **BOOT** button while REDLINE runs.
+  - Tap the 4 red crosses, draw to check the dots land under your finger, then **SAVE**. Kept in flash
+    (survives power-off and `update` flashes). AGAIN / BOOT redoes it; 60 s without a tap cancels.
+  - Fixes taps that land off target and panels with mirrored or swapped axes. Works even when touch is
+    too far off to hit SETUP, since BOOT is a real button.
+  - Serial: `touchcal` (open it), `touchcal=reset`, `touchcal=xmin,xmax,ymin,ymax,axis`.
+  - Build-time defaults: `TOUCH_CAL_XMIN/XMAX/YMIN/YMAX/AXIS` (config.h, or `-D` in platformio.ini).
+  - No reaction to taps even on that screen: the board isn't an ESP32-2432S028R (2.4"/3.2", capacitive
+    or no-touch version).
+
 ## [1.6.6] - 2026-10-08
 
 ### Changed
