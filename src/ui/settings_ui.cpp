@@ -97,6 +97,7 @@ static void compose(Canvas &cv, const Settings &s) {
 
     cv.text(font_ui, 12, 20, "SETTINGS", C(t.accentBright), ALIGN_LEFT, 2);
     cv.text(font_small, 312, 41, "v" REDLINE_VERSION, C(C_MUTED), ALIGN_RIGHT);
+    cv.text(font_small, 266, 41, "BOOT BUTTON = TOUCH CAL", C(C_MUTED), ALIGN_RIGHT);
     button(cv, t, R_COLORS, "COLORS", false);
     button(cv, t, R_TIMER, "TIMER", false);
     button(cv, t, R_DONE, "DONE", true);

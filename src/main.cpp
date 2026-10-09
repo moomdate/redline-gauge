@@ -11,6 +11,7 @@
 //         beep=on|off  peak=reset  help    — plus data lines in SERIAL mode.
 #include <Arduino.h>
 #include <Preferences.h>
+#include "ui/touch_cal_ui.h"
 #include <TFT_eSPI.h>
 #include <TFT_Touch.h>
 #include <driver/gpio.h>
@@ -35,6 +36,38 @@ static TFT_eSPI  tft;
 //                    DCS DCLK DIN DOUT  (bit-banged XPT2046, proven for this board)
 static TFT_Touch touch(33, 25, 32, 39);
 static Preferences prefs;
+
+// ---- touch calibration ------------------------------------------------------------------------
+// BOOT button (or serial `touchcal`) opens the calibration screen; the result lives in NVS
+// "touch"/"cal". Without one, the TOUCH_CAL_* build defaults (config.h / platformio.ini) apply.
+static const int BOOT_BTN_PIN = 0;
+static TouchCal touchCal = { TOUCH_CAL_XMIN, TOUCH_CAL_XMAX, TOUCH_CAL_YMIN, TOUCH_CAL_YMAX, TOUCH_CAL_AXIS };
+static volatile bool touchCalRequested = false;
+
+static void applyTouchCal() {
+    touch.setCal(touchCal.xmin, touchCal.xmax, touchCal.ymin, touchCal.ymax, 320, 240, touchCal.axis);
+}
+
+static void loadTouchCal() {
+    Preferences p;
+    if (p.begin("touch", true)) {
+        TouchCal c;
+        if (p.getBytes("cal", &c, sizeof c) == sizeof c) touchCal = c;
+        p.end();
+    }
+    applyTouchCal();
+    Serial.printf("[touch] setCal(%d, %d, %d, %d, %d)  (BOOT button = calibrate)\n",
+                  touchCal.xmin, touchCal.xmax, touchCal.ymin, touchCal.ymax, touchCal.axis);
+}
+
+static void saveTouchCal(bool clear = false) {
+    Preferences p;
+    if (!p.begin("touch", false)) return;
+    if (clear) p.remove("cal");
+    else p.putBytes("cal", &touchCal, sizeof touchCal);
+    p.end();
+}
+
 
 // ---- data sources (order = SourceId in settings.h) -----------------------------------
 static SimSource    simAuto(false);
@@ -114,6 +147,7 @@ static void printHelp() {
         "  mode=sim|touch|serial|obd|custom|honda|hondatest   theme=ice|lime|amber   shift=7000\n"
         "  bright=20..100   beep=on|off   peak=reset   help\n"
         "  panels=auto|standard|hybrid   gearmode=auto|off   invert=on|off (panel colours)\n"
+        "  touchcal (or BOOT button)   touchcal=reset   touchcal=xmin,xmax,ymin,ymax,axis\n"
         "  timer   timerlog   timerlog=clear   kdump (HONDA K raw tables)   klineinvert=on|off\n"
         "  obd=scan | obd=AA:BB:CC:DD:EE:FF   obdpin=1234|0000 (empty = auto)\n"
         "data (SERIAL mode):  rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3\n"
@@ -171,6 +205,28 @@ static void handleLine(char *line) {
         else if (!strncasecmp(v, "std", 3) || !strncasecmp(v, "standard", 8)) s.panels = PANELS_STANDARD;
         else if (!strncasecmp(v, "hyb", 3)) s.panels = PANELS_HYBRID;
         else { Serial.println("[gauge] panels=auto|standard|hybrid"); return; }
+    } else if (!strncasecmp(p, "touchcal", 8)) {
+        // touchcal              -> open the calibration screen (same as the BOOT button)
+        // touchcal=reset        -> back to the build defaults
+        // touchcal=x0,x1,y0,y1,axis -> set directly (numbers from another board / the screen)
+        const char *eq = strchr(p, '=');
+        if (!eq) { touchCalRequested = true; return; }
+        if (!strncasecmp(eq + 1, "reset", 5)) {
+            touchCal = { TOUCH_CAL_XMIN, TOUCH_CAL_XMAX, TOUCH_CAL_YMIN, TOUCH_CAL_YMAX, TOUCH_CAL_AXIS };
+            saveTouchCal(true);
+        } else {
+            int x0, x1, y0, y1, ax = 1;
+            if (sscanf(eq + 1, "%d,%d,%d,%d,%d", &x0, &x1, &y0, &y1, &ax) < 4) {
+                Serial.println("[gauge] touchcal | touchcal=reset | touchcal=xmin,xmax,ymin,ymax,axis");
+                return;
+            }
+            touchCal = { (int16_t)x0, (int16_t)x1, (int16_t)y0, (int16_t)y1, (uint8_t)(ax ? 1 : 0) };
+            saveTouchCal();
+        }
+        applyTouchCal();
+        Serial.printf("[touch] setCal(%d, %d, %d, %d, %d) saved\n", touchCal.xmin, touchCal.xmax,
+                      touchCal.ymin, touchCal.ymax, touchCal.axis);
+        return;
     } else if (keyIs(p, "invert", &v)) {
         s.invert = !strncasecmp(v, "on", 2) || *v == '1';
     } else if (keyIs(p, "gearmode", &v)) {           // not "gear=": that's a data key
@@ -447,9 +503,42 @@ static void openSettings() {
     settings_ui::draw(settings);
 }
 
+static void repaintScreen();
+
+static void runTouchCal() {
+    SimSource::touchThrottle = 0;
+    if (touch_cal_ui::run(tft, touch, touchCal, BOOT_BTN_PIN)) {
+        saveTouchCal();
+        beep(2600, 60, true);
+    }
+    applyTouchCal();
+    repaintScreen();
+}
+
 static void closeSettings() {
     screen = SCR_GAUGE;
     gauge_ui::setTheme(kThemes[settings.theme]);   // repaint background + all regions
+}
+
+static void repaintScreen() {                      // after something drew over the whole screen
+    switch (screen) {
+        case SCR_SETTINGS: settings_ui::draw(settings); break;
+        case SCR_TIMER:    backToTimer(); break;
+        case SCR_LOG:      timer_ui::drawLog(runLog); break;
+        default:           gauge_ui::setTheme(kThemes[settings.theme]); break;
+    }
+}
+
+static bool bootPressed() {                        // BOOT released after a press of >= 50 ms
+    static uint32_t downAt = 0;
+    bool down = digitalRead(BOOT_BTN_PIN) == LOW;
+    if (down && !downAt) downAt = millis() | 1;
+    if (!down && downAt) {
+        bool ok = millis() - downAt >= 50;
+        downAt = 0;
+        return ok;
+    }
+    return false;
 }
 
 // ---- touch ------------------------------------------------------------------------------------
@@ -607,7 +696,8 @@ void setup() {
     tft.setSwapBytes(true);                          // canvas holds plain RGB565
     backlightBegin();
     setBacklight(settings.brightness);
-    touch.setCal(526, 3443, 750, 3377, 320, 240, 1); // proven values for this board
+    pinMode(BOOT_BTN_PIN, INPUT_PULLUP);
+    loadTouchCal();
 
     // Boot splash with the birdlab.th credit (required by NOTICE); its mini shift
     // bar fills as a progress bar. A tap skips it, but only after kSkipAfterMs.
@@ -649,6 +739,7 @@ void loop() {
 
     pollSerial();
 
+    if (touchCalRequested || bootPressed()) { touchCalRequested = false; runTouchCal(); }
     handleTouch();
 
     int src = activeSrc;

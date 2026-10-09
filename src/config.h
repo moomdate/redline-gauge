@@ -88,6 +88,24 @@
 // beeps pull current spikes that, with a PWM-dimmed backlight, could garble the 80 MHz display.
 #define SPEAKER_VOLUME       60
 #define TOUCH_LONGPRESS_MS  800
+// Touch calibration: touch.setCal(XMIN, XMAX, YMIN, YMAX, 320, 240, AXIS). Defaults = the reference
+// board. Each board can calibrate itself (BOOT button -> 4 crosses -> SAVE, kept in NVS); these are
+// only the starting values. Override per build in platformio.ini (-D TOUCH_CAL_XMIN=... etc.).
+#ifndef TOUCH_CAL_XMIN
+#define TOUCH_CAL_XMIN      526
+#endif
+#ifndef TOUCH_CAL_XMAX
+#define TOUCH_CAL_XMAX     3443
+#endif
+#ifndef TOUCH_CAL_YMIN
+#define TOUCH_CAL_YMIN      750
+#endif
+#ifndef TOUCH_CAL_YMAX
+#define TOUCH_CAL_YMAX     3377
+#endif
+#ifndef TOUCH_CAL_AXIS
+#define TOUCH_CAL_AXIS        1     // 1 = XPT2046 channel 0x90 is the screen's X
+#endif
 
 // ---- Side-panel captions (uppercase A-Z and spaces only) ----------------------
 // Air-cooled motorcycle (e.g. Honda Wave)? publish oil temp on CH_COOLANT and

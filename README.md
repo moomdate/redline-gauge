@@ -51,6 +51,10 @@ ls /dev/cu.*                                                   # find the port (
 ```
 - `esp32dev` = a panel that needs color inversion (the original board)
 - `cyd-noinvert` = a panel with normal colors (if colors look inverted, switch env)
+- **Touch off / missing taps?** Press the board's **BOOT** button once while REDLINE runs: tap the 4 red crosses,
+  check the dots land under your finger, then **SAVE** (kept in flash; `touchcal=reset` undoes it, serial `touchcal`
+  opens it too). Build-time defaults: `-D TOUCH_CAL_XMIN/XMAX/YMIN/YMAX/AXIS` in `platformio.ini`.
+  No reaction to taps even there: the board isn't an ESP32-2432S028**R** (2.4"/3.2", capacitive or no-touch).
 
 ## Using it
 

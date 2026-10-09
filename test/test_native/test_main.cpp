@@ -9,6 +9,7 @@
 #include "data/gauge_bus.h"
 #include "data/obd_parse.h"
 #include "data/honda_kline.h"
+#include "ui/touch_cal_math.h"
 #include "data/serial_source.h"
 #include "data/sim_source.h"
 #include "ui/canvas.h"
@@ -690,6 +691,30 @@ static void test_honda_kline_frames() {
     TEST_ASSERT_FALSE(hkDecodeMain(s, sizeof s, d));
 }
 
+// ---- touch calibration --------------------------------------------------------------------------
+static void test_touch_cal_solve() {
+    TouchCal c;
+    // reference board: channel 0x90 follows X, 0xD0 follows Y
+    const long a[4] = { 526, 3443, 526, 3443 }, b[4] = { 750, 750, 3377, 3377 };
+    TEST_ASSERT_TRUE(touchCalSolve(a, b, c));
+    TEST_ASSERT_EQUAL_INT(526, c.xmin);  TEST_ASSERT_EQUAL_INT(3443, c.xmax);
+    TEST_ASSERT_EQUAL_INT(750, c.ymin);  TEST_ASSERT_EQUAL_INT(3377, c.ymax);
+    TEST_ASSERT_EQUAL_UINT8(1, c.axis);
+    // panel with the channels swapped: 0xD0 follows X -> axis 0
+    TEST_ASSERT_TRUE(touchCalSolve(b, a, c));
+    TEST_ASSERT_EQUAL_UINT8(0, c.axis);
+    TEST_ASSERT_EQUAL_INT(526, c.xmin);  TEST_ASSERT_EQUAL_INT(3377, c.ymax);
+    // mirrored X: the range comes out reversed, and still maps the crosses to 30 / 290 px
+    const long m[4] = { 3443, 526, 3443, 526 };
+    TEST_ASSERT_TRUE(touchCalSolve(m, b, c));
+    TEST_ASSERT_EQUAL_INT(3443, c.xmin); TEST_ASSERT_EQUAL_INT(526, c.xmax);
+    TEST_ASSERT_EQUAL_INT(30, touchCalMap(3443, c.xmin, c.xmax, 320));
+    TEST_ASSERT_EQUAL_INT(290, touchCalMap(526, c.xmin, c.xmax, 320));
+    // taps all in one spot: rejected
+    const long s[4] = { 2000, 2100, 2050, 2080 };
+    TEST_ASSERT_FALSE(touchCalSolve(s, s, c));
+}
+
 static void test_gear_estimate() {
     static const float ratios[] = GEAR_RATIOS;
     for (int g = 0; g < GEAR_COUNT; g++) {
@@ -963,6 +988,7 @@ int main(int, char **) {
     RUN_TEST(test_obd_supported_pid_mask);
     RUN_TEST(test_obd_hybrid_pids);
     RUN_TEST(test_honda_kline_frames);
+    RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);
     RUN_TEST(test_drag_timer_lift_and_arming);
     RUN_TEST(test_drag_timer_throttle_start);
