@@ -669,8 +669,9 @@ static void test_honda_kline_frames() {
     const uint8_t pingReply[] = { 0x0E, 0x04, 0x72, 0x7C };
     TEST_ASSERT_TRUE(hkFrameOk(pingReply, 4));
 
-    // table 0x17 (Wave): 1500 rpm, TPS 0x3C*0.5 = 30 %, temp 0x82-40 = 90 C, battery 0x7D = 12.5 V
-    uint8_t g[19] = { 0x02, 0x13, 0x71, 0x17, 0x05, 0xDC, 0x33, 0x3C, 0, 0, 0, 0x82, 0, 0,
+    // table 0x17 (Wave): 1500 rpm, TPS 0x3C*0.5 = 30 %, engine d[5] 0x82-40 = 90 C,
+    // intake d[7] 0x48-40 = 32 C, battery 0x7D = 12.5 V
+    uint8_t g[19] = { 0x02, 0x13, 0x71, 0x17, 0x05, 0xDC, 0x33, 0x3C, 0, 0x82, 0, 0x48, 0, 0,
                       0x7D, 0x01, 0x20, 0x90, 0 };
     g[18] = hkChecksum(g, 18);
     HondaData d;
@@ -678,6 +679,7 @@ static void test_honda_kline_frames() {
     TEST_ASSERT_EQUAL_FLOAT(1500, d.rpm);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 30, d.tps);
     TEST_ASSERT_EQUAL_FLOAT(90, d.temp);
+    TEST_ASSERT_EQUAL_FLOAT(32, d.iat);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.5f, d.batt);
     g[7] = 0xFF; g[18] = hkChecksum(g, 18);
     TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));

@@ -43,11 +43,12 @@ inline bool hkIsTableReply(const uint8_t *f, size_t n, uint8_t table) {
 
 // Only what the gauge shows; the bike's speedo is mechanical, the ECU has no speed.
 struct HondaData {
-    float rpm, tps, temp, batt;
+    float rpm, tps, temp, iat, batt;
 };
 
 // Table 0x17 on the Wave 110i / 125i ECU (payload = bytes after 02 <len> 71 17):
-//   [0-1] rpm  [2] TPS V*256/5  [3] TPS %*2  [7] engine temp +40  [10] battery V*10
+//   [0-1] rpm  [2] TPS V*256/5  [3] TPS %*2  [4] engine temp sensor V  [5] engine temp +40
+//   [6] intake air sensor V  [7] intake air temp +40  [10] battery V*10
 //   [11-12] injector  [13] ignition   (the last two are not used)
 inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) {
     if (!hkIsTableReply(f, n, HK_TABLE) || n < 4 + 14 + 1) return false;   // 14 data bytes + checksum
@@ -55,7 +56,8 @@ inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) {
     d.rpm = (float)(p[0] << 8 | p[1]);
     d.tps = p[3] * 0.5f;
     if (d.tps > 100) d.tps = 100;
-    d.temp = p[7] - 40.0f;
+    d.temp = p[5] - 40.0f;
+    d.iat = p[7] - 40.0f;
     d.batt = p[10] / 10.0f;
     return true;
 }

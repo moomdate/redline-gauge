@@ -4,6 +4,14 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.6.8] - 2026-10-10
+
+### Fixed
+- **HONDA K engine temperature** (Wave 110i / 125i): COOLANT read the intake air byte, so it stayed near
+  air temperature on a warm engine. Table 0x17 is d[4] engine sensor V, **d[5] engine temp +40**,
+  d[6] intake sensor V, **d[7] intake air temp +40**. COOLANT now reads d[5], and INTAKE (d[7]) is shown too.
+  HONDA TEST and the ECU simulator sketch follow the same layout.
+
 ## [1.6.7] - 2026-10-09
 
 ### Added
@@ -25,13 +33,13 @@ new features bump the middle number, fixes the last one.
     Wiring diagrams updated.
   - Wake 70 ms low / 130 ms high, ping + init, then table 0x17 only. The ECU must answer the ping or the init;
     the transceiver's echo alone no longer counts as connected.
-  - Shows RPM, throttle, engine temp (d[7]) and battery. No speed or gear: the Wave's speedo is cable-driven.
+  - Shows RPM, throttle, engine temp and battery. No speed or gear: the Wave's speedo is cable-driven.
 
 ### Added
 - **SETUP → DATA SOURCE → H TEST** (`mode=hondatest`): finds the bytes on a new bike without a laptop.
   - Every 5 s the SPEED slot shows a different raw byte of table 0x17, named big in place of the voltage panel
     (`SPEED TEST A` / `d[4]`, then `B` / `d[5]` …). Note which one follows the speedo.
-  - INTAKE shows d[5] − 40 next to COOLANT d[7] − 40, to tell engine temp from intake temp.
+  - COOLANT shows d[5] − 40 next to INTAKE d[7] − 40 (layout fixed in 1.6.8).
 - **`klineinvert=on|off`** for opto-isolated K-line boards that invert the line (saved).
 - **`examples/HondaEcuSim`**: an Arduino / ESP32 sketch that pretends to be a Wave ECU, to bench-test HONDA K.
 - K-line wiring diagrams: Honda 4-pin → board → CYD, a DIY 2×PC817 opto interface, and an MC33660 interface.

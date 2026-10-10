@@ -136,6 +136,7 @@ void HondaKSource::poll() {
             bus::publish(CH_RPM, d.rpm);
             bus::publish(CH_THROTTLE, d.tps);
             bus::publish(CH_COOLANT, d.temp);
+            bus::publish(CH_IAT, d.iat);
             bus::publish(CH_VOLTAGE, d.batt);
             errors_ = 0;
             bus::setLink(Link::Live, "");
@@ -157,8 +158,8 @@ void HondaKSource::publishTest() {
     int pn = respLen_ - 5;                            // data bytes (without the checksum)
     if (pn >= 2) bus::publish(CH_RPM, (float)(p[0] << 8 | p[1]));
     if (pn > 3) bus::publish(CH_THROTTLE, p[3] * 0.5f > 100 ? 100 : p[3] * 0.5f);
-    if (pn > 5) bus::publish(CH_IAT, p[5] - 40.0f);
-    if (pn > 7) bus::publish(CH_COOLANT, p[7] - 40.0f);
+    if (pn > 5) bus::publish(CH_COOLANT, p[5] - 40.0f);
+    if (pn > 7) bus::publish(CH_IAT, p[7] - 40.0f);
     if (pn > 10) bus::publish(CH_VOLTAGE, p[10] / 10.0f);
 
     const int first = 4;                              // candidates: d[4] .. last data byte

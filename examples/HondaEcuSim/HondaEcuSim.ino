@@ -92,7 +92,8 @@ void sendTable17() {
   d[0] = r >> 8;        d[1] = r & 0xFF;
   d[2] = (uint8_t)((0.5f + tps / 100.0f * 4.0f) * 256 / 5);   // TPS volts
   d[3] = (uint8_t)(tps * 2);                                   // TPS % x2
-  d[7] = (uint8_t)(temp + 40);                                 // engine temp +40
+  d[5] = (uint8_t)(temp + 40);                                 // engine temp +40
+  d[7] = (uint8_t)(32 + 40);                                   // intake air 32 C +40
   d[10] = (uint8_t)(batt * 10);                                // battery V x10
   uint16_t inj = (uint16_t)(injMs * 250);
   d[11] = inj >> 8;     d[12] = inj & 0xFF;                    // injector ms x250

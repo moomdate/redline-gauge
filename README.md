@@ -239,8 +239,8 @@ through its red 4-pin diagnostic connector. Other models may lay out the data di
 - **HONDA TEST** (SETUP → DATA SOURCE → **H TEST**, or `mode=hondatest`) helps find the bytes on a new
   bike without a laptop. Same link and values, but every 5 s the **SPEED** slot shows a different raw byte of
   table 0x17, named in the status bar: `A d[4]`, `B d[5]`, `C d[6]` … (one minute per round).
-  Ride or spin the wheel and note which letter follows the speedo. **INTAKE** shows d[5] − 40 next to
-  **COOLANT** d[7] − 40: whichever climbs to ~90 °C after a warm-up is the engine temperature.
+  Ride or spin the wheel and note which letter follows the speedo. **COOLANT** shows d[5] − 40 next to
+  **INTAKE** d[7] − 40: whichever climbs to ~90 °C after a warm-up is the engine temperature.
 - **`kdump`** over serial prints every table raw once a second and marks the bytes that changed. Use it to
   check the byte layout on a new model: idle, then blip the throttle.
 - Experimental: it has not been run on a bike with REDLINE yet. Please report results.
