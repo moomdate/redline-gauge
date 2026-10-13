@@ -62,6 +62,7 @@ bool HondaKSource::wake() {
     digitalWrite(KLINE_TX_PIN, kHigh);
     delay(130);
     K.begin(10400, SERIAL_8N1, KLINE_RX_PIN, KLINE_TX_PIN, s_invert);
+    gpio_pullup_en((gpio_num_t)KLINE_RX_PIN);   // opto boards leave RX open-collector, no pull-up
     while (K.available()) K.read();
     bool ping = transact(HK_PING, sizeof HK_PING, 200) && resp_[0] == 0x0E;
     bool init = transact(HK_INIT, sizeof HK_INIT, 300) && resp_[0] == 0x02;
@@ -136,7 +137,7 @@ void HondaKSource::poll() {
             bus::publish(CH_RPM, d.rpm);
             bus::publish(CH_THROTTLE, d.tps);
             bus::publish(CH_COOLANT, d.temp);
-            bus::publish(CH_IAT, d.iat);
+            if (d.hasIat) bus::publish(CH_IAT, d.iat);
             bus::publish(CH_VOLTAGE, d.batt);
             errors_ = 0;
             bus::setLink(Link::Live, "");
@@ -159,7 +160,7 @@ void HondaKSource::publishTest() {
     if (pn >= 2) bus::publish(CH_RPM, (float)(p[0] << 8 | p[1]));
     if (pn > 3) bus::publish(CH_THROTTLE, p[3] * 0.5f > 100 ? 100 : p[3] * 0.5f);
     if (pn > 5) bus::publish(CH_COOLANT, p[5] - 40.0f);
-    if (pn > 7) bus::publish(CH_IAT, p[7] - 40.0f);
+    if (pn > 7 && (p[6] != 0xFF || p[7] != 0xFF)) bus::publish(CH_IAT, p[7] - 40.0f);
     if (pn > 10) bus::publish(CH_VOLTAGE, p[10] / 10.0f);
 
     const int first = 4;                              // candidates: d[4] .. last data byte

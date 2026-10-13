@@ -680,7 +680,16 @@ static void test_honda_kline_frames() {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 30, d.tps);
     TEST_ASSERT_EQUAL_FLOAT(90, d.temp);
     TEST_ASSERT_EQUAL_FLOAT(32, d.iat);
+    TEST_ASSERT_TRUE(d.hasIat);
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.5f, d.batt);
+    // Wave 100i (real dump): 1262 rpm, engine 0x94-40 = 108 C, no intake air sensor (FF FF FF FF)
+    const uint8_t w100[] = { 0x02, 0x18, 0x71, 0x17, 0x04, 0xEE, 0x18, 0x00, 0x1D, 0x94, 0xFF, 0xFF,
+                             0xFF, 0xFF, 0x74, 0x02, 0x13, 0x8E, 0x60, 0, 0, 0, 0, 0x30 };
+    TEST_ASSERT_TRUE(hkDecodeMain(w100, sizeof w100, d));
+    TEST_ASSERT_EQUAL_FLOAT(1262, d.rpm);
+    TEST_ASSERT_EQUAL_FLOAT(108, d.temp);
+    TEST_ASSERT_FALSE(d.hasIat);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 11.6f, d.batt);
     g[7] = 0xFF; g[18] = hkChecksum(g, 18);
     TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));
     TEST_ASSERT_EQUAL_FLOAT(100, d.tps);                         // clamped
