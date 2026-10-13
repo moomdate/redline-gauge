@@ -5,7 +5,7 @@
 // ============================================================================
 
 // ---- RPM bar / shift light -------------------------------------------------
-#define RPM_MAX            8000    // full scale of the 13-slot shift bar
+#define RPM_MAX           12000    // full scale of the 13-slot shift bar
 #define RPM_SHIFT          7000    // shift light: bar flashes, LED red, beep
 #define RPM_IDLE            850    // simulator idle
 #define RPM_DISPLAY_STEP     50    // big RPM number is rounded to this (reduces flicker)

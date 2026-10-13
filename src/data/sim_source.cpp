@@ -14,7 +14,8 @@ static const float kRatios[] = GEAR_RATIOS;
 static const int   kGears = sizeof(kRatios) / sizeof(kRatios[0]);
 static const float kMass = 1250.0f * 1.08f;               // kg, incl. rotating inertia
 static const float kWheelR = TIRE_CIRCUMFERENCE_M / (2.0f * 3.14159265f);
-static const float kLimiter = RPM_MAX - 300;
+static const float kSimRpmMax = 8000;                    // the simulated car's rev range (not RPM_MAX)
+static const float kLimiter = kSimRpmMax - 300;
 static const float kTraction = 6200.0f;                    // N, max drive force at the tyres
 
 static float frand(float a) { return ((rand() & 0xFFFF) / 32767.5f - 1.0f) * a; }
@@ -48,7 +49,7 @@ static const int kPhases = sizeof(kScript) / sizeof(kScript[0]);
 static const Phase kDrag[] = {
     { P_IDLE,     0, 0.00f,         0,  4 },   // READY at the line (the car is put at a stop
                                                // when the timer opens)
-    { P_ACCEL,  205, 1.00f, RPM_MAX - 350, 40 },
+    { P_ACCEL,  205, 1.00f, kSimRpmMax - 350, 40 },
     { P_BRAKE,    0, 0.70f,         0, 25 },   // back to the line, then the next run
 };
 static const int kDragPhases = sizeof(kDrag) / sizeof(kDrag[0]);
@@ -197,7 +198,7 @@ void SimSource::step(float dt) {
         if (rpm_ >= kLimiter) rpm_ = kLimiter - 40 - frand(30);      // bounce off the limiter
     } else {
         // free-revving (neutral or mid-shift): rises with throttle, decays toward idle/target
-        float target = running ? idle + throttle_ * (RPM_MAX - 1500 - idle) : rpm_;
+        float target = running ? idle + throttle_ * (kSimRpmMax - 1500 - idle) : rpm_;
         if (shiftTimer_ > 0 && pendingGear_ > 0)                    // mid-shift: fall toward new gear
             target = fmaxf(wheelRpm * kRatios[pendingGear_ - 1] * FINAL_DRIVE, idle);
         if (running) rpm_ = toward(rpm_, target, dt, shiftTimer_ > 0 ? 0.07f : 0.3f);
@@ -212,7 +213,7 @@ void SimSource::step(float dt) {
     if (speed_ < 0 || (speed_ < 0.15f && drive <= 0)) speed_ = 0;
 
     // ---- thermal & electrical ----
-    float load = throttle_ * rpm_ / RPM_MAX;
+    float load = throttle_ * rpm_ / kSimRpmMax;
     if (running) {
         if (coolant_ < 88) coolant_ += (0.45f + rpm_ / 3500.0f + load * 2.0f) * dt;
         else {

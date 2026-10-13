@@ -4,6 +4,19 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [Unreleased]
+
+### Changed
+- **RPM bar full scale 12,000** (was 8,000), so high-revving bikes fit; the SHIFT LIGHT setting now goes up to 12,000.
+
+### Fixed
+- **Touch accuracy**: own XPT2046 reader (pressure check, median of 5 reads, slower clock) replaces TFT_Touch,
+  which dropped readings mid-press. Taps no longer repeat, calibration takes each cross in one press, and a
+  5th centre cross checks the result (redo when more than 12 px off).
+- **HONDA K with opto interfaces**: internal pull-up on the K-line RX pin (open-collector opto output).
+- **Honda Wave 100i**: works over HONDA K. It has no intake air sensor (the ECU sends FF), so INTAKE is
+  no longer shown as 215 C on bikes without one.
+
 ## [1.6.8] - 2026-10-10
 
 ### Fixed
