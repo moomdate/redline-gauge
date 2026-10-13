@@ -221,7 +221,7 @@ SETUP → **TIMER** (or `timer` over serial). Works with any source that deliver
 
 ## Honda motorcycles over K-line (HONDA K, experimental)
 
-SETUP → DATA SOURCE → **HONDA**, or `mode=honda`. This reads the ECU of the **Honda Wave 110i / 125i**
+SETUP → DATA SOURCE → **HONDA**, or `mode=honda`. This reads the ECU of the **Honda Wave 100i / 110i / 125i**
 through its red 4-pin diagnostic connector. Other models may lay out the data differently.
 
 - **Hardware**: a K-line transceiver board between the bike and the CYD, either an L9637D board or an

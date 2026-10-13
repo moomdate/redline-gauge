@@ -4,7 +4,7 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
-## [Unreleased]
+## [1.6.9] - 2026-10-13
 
 ### Changed
 - **RPM bar full scale 12,000** (was 8,000), so high-revving bikes fit; the SHIFT LIGHT setting now goes up to 12,000.
