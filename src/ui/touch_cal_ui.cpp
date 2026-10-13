@@ -1,7 +1,8 @@
 #include "ui/touch_cal_ui.h"
 #include <Arduino.h>
 #include <TFT_eSPI.h>
-#include <TFT_Touch.h>
+#include <math.h>
+#include "hw/xpt2046_touch.h"
 
 namespace touch_cal_ui {
 
@@ -11,10 +12,11 @@ static const int PY[4] = { M, M, H - M, H - M };
 static const int BTN_Y = 196, BTN_H = 36;
 static const int SAVE_X = 70, AGAIN_X = 170, BTN_W = 80;
 static const uint32_t IDLE_CANCEL_MS = 60000;
+static const float    TOUCH_CAL_MAX_OFF_PX = 12;   // centre check tolerance
 
 enum Outcome { GOT, BOOT, IDLE };
 
-static void apply(TFT_Touch &t, const TouchCal &c) {
+static void apply(Xpt2046Touch &t, const TouchCal &c) {
     t.setCal(c.xmin, c.xmax, c.ymin, c.ymax, W, H, c.axis);
 }
 
@@ -47,12 +49,18 @@ static void button(TFT_eSPI &tft, int x, const char *label, uint16_t fill) {
     tft.drawString(label, x + BTN_W / 2, BTN_Y + BTN_H / 2, 1);
 }
 
-// One press, averaged over both raw channels. Forgiving on purpose: a resistive panel drops a
-// reading now and then, so gaps up to 80 ms are part of the same press, and a press counts once it
-// has 8 good samples (it stops collecting at 25). BOOT or a long idle aborts.
-static Outcome samplePress(TFT_Touch &touch, int bootPin, long &a, long &b, const char *&why) {
+static long median(long *v, int n) {
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0 && v[j] < v[j - 1]; j--) { long t = v[j]; v[j] = v[j - 1]; v[j - 1] = t; }
+    return v[n / 2];
+}
+
+// One press: the median of both raw channels, skipping the first quarter of the samples (the
+// finger is still settling). Gaps up to 80 ms are part of the same press, and a press counts once
+// it has 8 good samples (it stops collecting at 25). BOOT or a long idle aborts.
+static Outcome samplePress(Xpt2046Touch &touch, int bootPin, long &a, long &b, const char *&why) {
     uint32_t since = millis();
-    long sa = 0, sb = 0;
+    long sa[25], sb[25];
     int n = 0;
     uint32_t lastGood = 0;
     for (;;) {
@@ -60,23 +68,24 @@ static Outcome samplePress(TFT_Touch &touch, int bootPin, long &a, long &b, cons
         if (n == 0 && millis() - since > IDLE_CANCEL_MS) { why = "no tap for 60 s"; return IDLE; }
         if (touch.Pressed()) {
             if (n == 0) Serial.printf("[touch]   press seen at raw %u, %u\n", touch.RawX(), touch.RawY());
-            sa += touch.RawX(); sb += touch.RawY();
+            sa[n] = touch.RawX(); sb[n] = touch.RawY();
             lastGood = millis();
             if (++n >= 25) break;
         } else if (n > 0 && millis() - lastGood > 80) {
             if (n >= 8) break;                         // short but usable tap
             Serial.printf("[touch]   press too short (%d samples), tap and hold a moment\n", n);
-            sa = sb = 0; n = 0;
+            n = 0;
         }
         delay(5);
     }
-    a = sa / n; b = sb / n;
+    int skip = n / 4;
+    a = median(sa + skip, n - skip); b = median(sb + skip, n - skip);
     while (touch.Pressed()) delay(10);
     delay(200);
     return GOT;
 }
 
-bool run(TFT_eSPI &tft, TFT_Touch &touch, TouchCal &cal, int bootPin) {
+bool run(TFT_eSPI &tft, Xpt2046Touch &touch, TouchCal &cal, int bootPin) {
     const TouchCal old = cal;
     if (bootPin >= 0) pinMode(bootPin, INPUT_PULLUP);
     Serial.println("[touch] calibration: tap the 4 crosses (BOOT = cancel)");
@@ -110,6 +119,31 @@ bool run(TFT_eSPI &tft, TFT_Touch &touch, TouchCal &cal, int bootPin) {
             tft.fillScreen(TFT_BLACK);
             centred(tft, "Taps missed the crosses", 100, TFT_RED, 2);
             centred(tft, "Starting again...", 130, TFT_WHITE, 2);
+            delay(1800);
+            continue;
+        }
+
+        // ---- 5th cross in the centre checks the result before it can be saved ----
+        tft.fillScreen(TFT_BLACK);
+        centred(tft, "Last one: tap the centre", 84, TFT_YELLOW, 2);
+        cross(tft, W / 2, H / 2, TFT_RED);
+        long ca, cb;
+        const char *why = "";
+        if (samplePress(touch, bootPin, ca, cb, why) != GOT) {
+            Serial.printf("[touch] cancel: %s\n", why);
+            cal = old; apply(touch, cal); Serial.println("[touch] calibration cancelled");
+            return false;
+        }
+        long cxr = next.axis ? ca : cb, cyr = next.axis ? cb : ca;
+        int px = touchCalMap(cxr, next.xmin, next.xmax, W), py = touchCalMap(cyr, next.ymin, next.ymax, H);
+        float off = sqrtf((float)(px - W / 2) * (px - W / 2) + (float)(py - H / 2) * (py - H / 2));
+        Serial.printf("[touch] centre check: raw %ld, %ld -> %d, %d (%.0f px off)\n", ca, cb, px, py, off);
+        if (off > TOUCH_CAL_MAX_OFF_PX) {
+            char msg[40];
+            snprintf(msg, sizeof msg, "Centre is %.0f px off", off);
+            tft.fillScreen(TFT_BLACK);
+            centred(tft, msg, 100, TFT_RED, 2);
+            centred(tft, "Press firmly. Again...", 130, TFT_WHITE, 2);
             delay(1800);
             continue;
         }

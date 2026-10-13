@@ -13,7 +13,7 @@
 #include <Preferences.h>
 #include "ui/touch_cal_ui.h"
 #include <TFT_eSPI.h>
-#include <TFT_Touch.h>
+#include "hw/xpt2046_touch.h"
 #include <driver/gpio.h>
 
 #include "config.h"
@@ -33,8 +33,8 @@
 #include "ui/timer_ui.h"
 
 static TFT_eSPI  tft;
-//                    DCS DCLK DIN DOUT  (bit-banged XPT2046, proven for this board)
-static TFT_Touch touch(33, 25, 32, 39);
+//                        CS CLK DIN DOUT  (bit-banged XPT2046, see hw/xpt2046_touch.h)
+static Xpt2046Touch touch(33, 25, 32, 39);
 static Preferences prefs;
 
 // ---- touch calibration ------------------------------------------------------------------------
@@ -542,14 +542,45 @@ static bool bootPressed() {                        // BOOT released after a pres
 }
 
 // ---- touch ------------------------------------------------------------------------------------
+// Debounced touch. A held finger on a resistive panel can drop out for a frame (pressure dips
+// under TOUCH_Z_MIN): each blip would be a release (a second tap: COLORS used to toggle several
+// times per press) or cut a tap short. Here a press
+// ends only after TOUCH_RELEASE_MS without a reading, and its position is the average of the
+// readings once the pressure has settled (the first TOUCH_SETTLE_MS of a press land off target).
+static const uint32_t TOUCH_RELEASE_MS = 60, TOUCH_SETTLE_MS = 20;
+
+static bool readTouch(int &x, int &y) {
+    static bool down = false;
+    static uint32_t t0 = 0, lastSeen = 0;
+    static long ax = 0, ay = 0;
+    static int n = 0, px = 0, py = 0;
+    uint32_t now = millis();
+    if (touch.Pressed()) {
+        int rx = touch.X(), ry = touch.Y();
+        if (!down) { down = true; t0 = now; n = 0; ax = ay = 0; px = rx; py = ry; }
+        lastSeen = now;
+        if (now - t0 >= TOUCH_SETTLE_MS) {
+            ax += rx; ay += ry; n++;
+            px = ax / n; py = ay / n;
+        } else if (!n) {
+            px = rx; py = ry;                            // until settled: the latest reading
+        }
+    } else if (down && now - lastSeen > TOUCH_RELEASE_MS) {
+        down = false;
+    }
+    x = px; y = py;
+    return down;
+}
+
 static void handleTouch() {
     static bool down = false, longDone = false;
     static uint32_t downAt = 0;
     static int sx = 0, sy = 0;
 
-    bool pressed = touch.Pressed();
-    int x = pressed ? touch.X() : sx, y = pressed ? touch.Y() : sy;
-    if (pressed && !down) { down = true; longDone = false; downAt = millis(); sx = x; sy = y; }
+    int x, y;
+    bool pressed = readTouch(x, y);
+    if (pressed && !down) { down = true; longDone = false; downAt = millis(); }
+    if (pressed) { sx = x; sy = y; }                     // settled average; taps act on release here
 
     if (screen == SCR_SETTINGS) {
         if (!pressed && down) {                  // act on release, at the press position
@@ -636,7 +667,7 @@ static void pushToTft(int x, int y, int w, int h, const uint16_t *px) {
     g_pushPx += (uint32_t)w * h;
 }
 
-// `bench` over serial: render a fixed 0 -> 8000 -> 0 rpm sweep as fast as possible and
+// `bench` over serial: render a fixed 0 -> RPM_MAX -> 0 rpm sweep as fast as possible and
 // report where the time goes. Same workload every run, so tuning changes are comparable.
 static void runBench() {
     GaugeSnapshot snap;
@@ -697,6 +728,7 @@ void setup() {
     backlightBegin();
     setBacklight(settings.brightness);
     pinMode(BOOT_BTN_PIN, INPUT_PULLUP);
+    touch.begin();
     loadTouchCal();
 
     // Boot splash with the birdlab.th credit (required by NOTICE); its mini shift

@@ -1,9 +1,10 @@
 #pragma once
 // Touch calibration maths, no hardware (unit-tested on the host).
-// TFT_Touch maps its calibration range onto [30, res-30] px, so the calibration screen puts its 4
+// The touch driver (hw/xpt2046_touch, the old TFT_Touch formula) maps its calibration range
+// onto [30, res-30] px, so the calibration screen puts its 4
 // crosses exactly there (30 px in from each edge): the averaged raw readings at the crosses ARE the
 // setCal() numbers. Points: 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right.
-// a = XPT2046 channel 0x90 (TFT_Touch RawX with axis 1), b = channel 0xD0.
+// a = XPT2046 channel 0x90 (RawX with axis 1), b = channel 0xD0.
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -30,7 +31,7 @@ inline bool touchCalSolve(const long a[4], const long b[4], TouchCal &out) {
     return abs(out.xmax - out.xmin) >= TOUCH_CAL_MIN_SPAN && abs(out.ymax - out.ymin) >= TOUCH_CAL_MIN_SPAN;
 }
 
-// Where TFT_Touch puts a raw reading with this calibration (same formula as the library).
+// Where the driver puts a raw reading with this calibration (TFT_Touch's formula).
 inline int touchCalMap(long raw, int lo, int hi, int res) {
     long v = (raw - lo) * (long)((res - TOUCH_CAL_MARGIN) - TOUCH_CAL_MARGIN) / (hi - lo) + TOUCH_CAL_MARGIN;
     return v < 0 ? 0 : v > res ? res : (int)v;

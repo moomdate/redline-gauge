@@ -5,12 +5,12 @@
 #include "ui/touch_cal_math.h"
 
 class TFT_eSPI;
-class TFT_Touch;
+class Xpt2046Touch;
 
 namespace touch_cal_ui {
 
 // cal: in = the calibration in use (restored on cancel), out = the saved one.
 // Returns true when the user saved a new calibration.
-bool run(TFT_eSPI &tft, TFT_Touch &touch, TouchCal &cal, int bootPin);
+bool run(TFT_eSPI &tft, Xpt2046Touch &touch, TouchCal &cal, int bootPin);
 
 }
