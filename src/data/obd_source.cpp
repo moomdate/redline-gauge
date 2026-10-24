@@ -1,12 +1,50 @@
 #include "data/obd_source.h"
 #include "data/gauge_bus.h"
 #include "data/obd_parse.h"
+#include "data/link_tracker.h"
 #include "config.h"
 #include <Arduino.h>
 #include <BluetoothSerial.h>
 #include <Preferences.h>
 
 static BluetoothSerial SerialBT;
+
+// ---- link status for the UI (the status pill and the OBD BT link page) ----------------------------
+static LinkTracker s_link("OBD BT", "ELM327 BLUETOOTH");
+static volatile bool s_bt = false;           // Bluetooth link to the adapter is up
+static char s_adapter[18] = "";              // MAC of the adapter in use (data task writes)
+static volatile uint8_t s_pids = 0;          // supported PIDs found at the last ECU search
+
+static const char *hintFor(const char *reason) {
+    if (!strcmp(reason, "NO ADAPTER")) return "Adapter not found: plugged in? powered?";
+    if (!strcmp(reason, "BT FAIL"))    return "Bluetooth didn't start: restart the gauge";
+    if (!strcmp(reason, "BT LOST"))    return "Bluetooth dropped: adapter unplugged?";
+    if (!strcmp(reason, "ELM ERROR"))  return "The adapter doesn't answer like an ELM327";
+    if (!strcmp(reason, "ECU LOST"))   return "The car stopped answering: ignition off?";
+    return "Adapter OK, car silent: ignition ON?";
+}
+
+static void connecting(const char *step) {
+    bus::setLink(Link::Connecting, step);
+    s_link.connecting(step);
+}
+
+bool ObdSource::linkStatus(LinkStatus &out) {
+    s_link.copy(out);
+    auto row = [&](const char *k, const char *v, bool bad) {
+        LinkRow &r = out.rows[out.rowCount++];
+        snprintf(r.key, sizeof r.key, "%s", k);
+        snprintf(r.value, sizeof r.value, "%s", v);
+        r.bad = bad;
+    };
+    row("BLUETOOTH", s_bt ? "CONNECTED" : "--", false);
+    size_t n = strlen(s_adapter);
+    row("ADAPTER", n ? s_adapter + (n > 8 ? n - 8 : 0) : "--", false);   // last 3 bytes of the MAC
+    char v[14];
+    if (s_pids) snprintf(v, sizeof v, "%u", (unsigned)s_pids); else snprintf(v, sizeof v, "--");
+    row("PIDS", v, false);
+    return true;
+}
 
 // ---- which adapter ------------------------------------------------------------------
 // ELM327 clones go by many Bluetooth names ("OBDII", "OBD2", "V-LINK", "VEEPEAK" …), so
@@ -82,7 +120,7 @@ static void saveMac(const char *mac) {
 // Older ELM327 clones (Bluetooth 2.0) don't put their name in the inquiry reply, so
 // unnamed devices get an explicit remote-name request before we judge them.
 bool ObdSource::scan(char *macOut) {
-    bus::setLink(Link::Connecting, "BT SCAN");
+    connecting("BT SCAN");
     Serial.println("[obd] scanning for Bluetooth Classic devices (10 s)...");
     BTScanResults *r = SerialBT.discover(10240);
     if (!r) { Serial.println("[obd] scan failed"); return false; }
@@ -154,6 +192,8 @@ static const uint8_t kSchedule[] = {
 
 void ObdSource::retryIn(uint32_t ms, State then, const char *msg) {
     bus::setLink(Link::Error, msg);
+    if (then == S_CONNECT || then == S_BT_START) s_bt = false;
+    s_link.retry(msg, hintFor(msg), ms);
     waitUntil_ = millis() + ms;
     after_ = then;
     state_ = S_WAIT;
@@ -171,10 +211,15 @@ void ObdSource::begin() {
     loadTarget();
     errors_ = 0;
     memset(noData_, 0, sizeof noData_);
-    bus::setLink(Link::Connecting, "BT START");
+    s_link.start();
+    s_bt = false;
+    s_pids = 0;
+    connecting("BT START");
 }
 
 void ObdSource::end() {
+    s_link.stop();
+    s_bt = false;
     if (btStarted_) {
         SerialBT.disconnect();
         SerialBT.end();
@@ -306,7 +351,7 @@ void ObdSource::poll() {
         const char *pin = pin_[0] ? pin_ : kPins[pinIdx_];
         SerialBT.setPin(pin, strlen(pin));
         s_passkey = strtoul(pin, nullptr, 10);
-        bus::setLink(Link::Connecting, "BT PAIRING");
+        connecting("BT PAIRING");
         Serial.printf("[obd] connecting to %s (PIN %s)\n", target, pin);
         bool ok = SerialBT.connect(BTAddress(target)) && SerialBT.connected(5000);
         if (!ok) {
@@ -319,13 +364,15 @@ void ObdSource::poll() {
         }
         Serial.printf("[obd] bluetooth connected to %s\n", target);
         saveMac(target);                             // writes only if it changed
+        strlcpy(s_adapter, target, sizeof s_adapter);
+        s_bt = true;
         macFails_ = 0;
         state_ = S_INIT;
         break;
     }
 
     case S_INIT: {
-        bus::setLink(Link::Connecting, "ELM INIT");
+        connecting("ELM INIT");
         // reset; reply is the version banner. Slow clones may answer after the timeout, so
         // swallow anything late before ATE0, or its '>' would end the ATE0 read early.
         if (!elm("ATZ", 5000)) {
@@ -353,7 +400,7 @@ void ObdSource::poll() {
 
     case S_SEARCH:
         // First real request makes the ELM auto-detect the protocol ("SEARCHING...").
-        bus::setLink(Link::Connecting, "ECU SEARCH");
+        connecting("ECU SEARCH");
         if (elm("0100", 10000) && strstr(resp_, "4100")) {
             // The 0100 reply says which PIDs 01-20 this ECU has; poll only those. Per-PID
             // "NO DATA" counts start fresh, so a sleepy ECU doesn't disable a PID for good.
@@ -372,6 +419,10 @@ void ObdSource::poll() {
                           (unsigned long)pidMask_[0], (unsigned long)pidMask_[1], (unsigned long)pidMask_[2],
                           (unsigned long)pidMask_[3], (unsigned long)pidMask_[4]);
             bus::setLink(Link::Live, "");
+            int pids = 0;
+            for (uint32_t m : pidMask_) for (int b = 0; b < 32; b++) pids += (m >> b) & 1;
+            s_pids = (uint8_t)(pids > 255 ? 255 : pids);
+            s_link.live();
             errors_ = 0;
             state_ = S_RUN;
         } else {
@@ -395,6 +446,7 @@ void ObdSource::poll() {
         if (readPid(idx) && nodataRun_ < 12) {
             errors_ = 0;
             bus::setLink(Link::Live, "");
+            s_link.reply();
         } else if (nodataRun_ >= 12) {                     // ECU answers nothing but NO DATA
             Serial.println("[obd] only NO DATA replies, searching for the ECU again");
             retryIn(2000, S_SEARCH, "NO ECU");

@@ -28,6 +28,10 @@
 #define VOLT_BAR_MAX       16.0f
 #define IAT_BAR_MIN         -10
 #define IAT_BAR_MAX          80
+#define AFR_RICH          13.8f    // AFR panel (HONDA K): below = rich (warning colour)
+#define AFR_LEAN          15.2f    //                       above = lean (blue)
+#define AFR_BAR_MIN       12.0f
+#define AFR_BAR_MAX       17.0f
 
 // ---- Hybrid panels (SETUP -> PANELS: HYBRID, or AUTO when the car reports them) ----
 #define HYBRID_PANEL2_LABEL "HV BATT"   // state of charge, %

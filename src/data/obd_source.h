@@ -15,6 +15,7 @@ public:
     void begin() override;
     void end() override;
     void poll() override;
+    bool linkStatus(LinkStatus &out) override;
 
     // Serial command tail after "obd=": "scan", "AA:BB:CC:DD:EE:FF" or "pin=0000".
     // Saved to NVS; safe to call from another core. Returns false if not understood.

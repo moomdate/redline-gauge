@@ -4,8 +4,9 @@
 //   transceiver RX-out -> GPIO 22      CYD GPIO 27 -> transceiver TX-in
 //   logic VCC <- 3.3 V (never 5 V on GPIO 22)    bike side: K-line, GND, +12 V switched
 // Same blocking state machine style as ObdSource:
-//   wake pulse -> ping -> init -> poll table 0x17
-// Shows rpm, throttle, engine temp and battery; the Wave has no ECU speed.
+//   wake pulse -> ping -> init -> poll table 0x17 (+ the O2 table 0x20 four times a second)
+// Shows rpm, throttle, engine temp, battery and the AFR estimated from the O2 sensor.
+// Lost link: a new wake-up every 2.5 s; linkStatus() tells the UI where it stands.
 // Serial `kdump` toggles a raw dump of every known table once a second (with the bytes
 // that changed marked) so table offsets can be checked on a new model.
 #include "data/source.h"
@@ -13,14 +14,11 @@
 
 class HondaKSource : public DataSource {
 public:
-    // test = HONDA TEST: same link, but every 5 s the SPEED slot shows a different raw byte of
-    // table 0x17 (status bar "A d[4]", "B d[5]" ...) so a tester can say which one is speed;
-    // INTAKE shows d[5]-40 next to COOLANT d[7]-40 to tell the two temperatures apart.
-    explicit HondaKSource(bool test = false) : test_(test) {}
-    const char *name() const override { return test_ ? "HONDA TEST" : "HONDA K"; }
+    const char *name() const override { return "HONDA K"; }
     void begin() override;
     void end() override;
     void poll() override;
+    bool linkStatus(LinkStatus &out) override;
 
     static volatile bool ownsUart;     // main.cpp leaves Serial2 alone while true
     static volatile bool dumpOn;       // `kdump` toggles
@@ -31,18 +29,22 @@ public:
 
 private:
     enum State : uint8_t { S_WAKE, S_RUN, S_WAIT };
+    enum Idle : uint8_t { IDLE_OK, IDLE_BUSY, IDLE_STUCK_LOW };
     State    state_ = S_WAKE, after_ = S_WAKE;
     uint32_t waitUntil_ = 0, lastDump_ = 0;
     uint8_t  errors_ = 0;
     bool     sawEcho_ = false;
-    const bool test_;
-    int8_t   testStep_ = -1;           // candidate shown last (-1 = none yet)
+    Idle     idle_ = IDLE_OK;          // K-line state seen before the last wake-up
+    bool     o2On_ = true;             // false once the ECU proved it has no table 0x20
+    uint8_t  o2Miss_ = 0;
+    uint32_t lastO2_ = 0;
     uint8_t  resp_[64];
     uint8_t  respLen_ = 0;
 
     void retryIn(uint32_t ms, State then, const char *msg);
+    Idle waitIdle();                   // wait for the K-line to sit idle before a wake-up
     bool wake();                       // pulse + ping + init; true when the ECU answered
     bool transact(const uint8_t *req, uint8_t n, uint32_t timeoutMs = 150);
     void dump();
-    void publishTest();
+    void pollO2();
 };

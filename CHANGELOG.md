@@ -4,6 +4,31 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [Unreleased]
+
+### Added
+- **Tap a right-hand panel to choose what it shows**: COOLANT, VOLTAGE, INTAKE, AFR or THROTTLE (new). It
+  skips values without data and values already on another panel; saved.
+- **HONDA K reads AFR**: the O2 sensor (table 0x20) four times a second, shown as the air-fuel ratio with
+  RICH / OK / LEAN in the theme's colours. Estimated from the stock narrowband sensor: a rich/lean guide, not
+  an exact ratio.
+- **Link pill** on the status bar for HONDA K and OBD BT: `ECU OK`, the connecting step (`BT PAIRING`,
+  `ELM INIT` …), or a red cross with the reason and the seconds to the next try (`NO ECU 2s`, `NO ADAPTER`,
+  `NO LINE` …); **NOT CONNECTED** shows above the RPM while the link is down.
+- **Link page** (tap the pill): state with what to check, next retry, uptime, replies per second, last reply,
+  links / drops, and the source's own details (K-line: echo, line level, O2, AFR; OBD: Bluetooth, adapter, PIDs).
+
+### Removed
+- **H TEST** data source (`mode=hondatest`): a gauge set to it starts in HONDA K.
+
+### Fixed
+- **HONDA K wakes the ECU more reliably**: a missed init reply is sent again (up to 5 times) instead of
+  starting the whole wake-up over, replies get 300–500 ms (was 120–300 ms) for slow ECUs and weak batteries,
+  the wake-up waits for the K-line to sit idle first (also giving the ECU time to boot after key-on), and the
+  link reconnects faster after a drop.
+- **New `K-LINE LOW` status**: shown when the K-line never goes high, i.e. a wiring or power problem
+  (no 12 V on the transceiver, TX/RX swapped) rather than a silent ECU.
+
 ## [1.6.9] - 2026-10-13
 
 ### Changed

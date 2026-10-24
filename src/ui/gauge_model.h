@@ -25,14 +25,12 @@ struct GaugeView {
     bool  coolValid;  int   coolant; Level coolLvl;
     bool  voltValid;  float volt;    Level voltLvl;
     bool  iatValid;   int   iat;     Level iatLvl;
+    bool  afrValid;   float afr;     Level afrLvl;   // LV_WARN = rich, LV_COLD = lean
+    bool  tpsValid;   int   tps;     // throttle %
     bool  hybrid;        // show the hybrid panel set (settings, or AUTO + data seen)
     bool  socValid;   int   soc;     Level socLvl;
     bool  kwValid;    float kw;
     bool  blink;         // shared slow blink phase for critical values
-
-    // HONDA TEST: the raw byte now on SPEED, shown big in place of the voltage panel
-    char  testTag[8];    // "d[13]", "" = not testing
-    char  testLetter;    // 'A', 'B' ...
 
     // status bar
     Link        link;
@@ -53,7 +51,7 @@ public:
 
 private:
     uint32_t t0_ = 0, last_ = 0;
-    float    rpmSmooth_ = 0, speedSmooth_ = 0;
+    float    rpmSmooth_ = 0, speedSmooth_ = 0, afrSmooth_ = 0;
     float    peak_ = 0;
     uint32_t peakAt_ = 0;
     int      sessionPeak_ = 0;
@@ -61,6 +59,7 @@ private:
     uint8_t  panels_ = 0;            // PANELS_AUTO
     bool     gearOff_ = false;
     bool     hybridSeen_ = false;    // AUTO latch: stays hybrid until the source changes
+    bool     afrSeen_ = false;       // same, for the AFR panel
 };
 
 // Estimate gear from rpm/speed using config.h ratios. 0 = no match (clutch/neutral).

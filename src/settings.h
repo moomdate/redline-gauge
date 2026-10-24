@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include "config.h"
 
-enum SourceId : uint8_t { SRC_SIM_AUTO, SRC_SIM_TOUCH, SRC_SERIAL, SRC_OBD, SRC_CUSTOM, SRC_HONDA, SRC_HONDA_TEST, SRC_COUNT };
+enum SourceId : uint8_t { SRC_SIM_AUTO, SRC_SIM_TOUCH, SRC_SERIAL, SRC_OBD, SRC_CUSTOM, SRC_HONDA, SRC_COUNT };
 
 // Right-hand panels. AUTO = HYBRID as soon as the source delivers hybrid battery data
 // (e.g. OBD on a Civic e:HEV), otherwise STANDARD.
@@ -12,6 +12,8 @@ enum PanelSet : uint8_t { PANELS_AUTO, PANELS_STANDARD, PANELS_HYBRID, PANELS_CO
 // Gear box: AUTO = estimate from rpm/speed (or use gear= when a source sends it);
 // OFF = hidden, for hybrids / CVTs where a gear number means nothing.
 enum GearMode : uint8_t { GEARMODE_AUTO, GEARMODE_OFF, GEARMODE_COUNT };
+// What each right-hand panel shows; tap a panel to step to the next value that has data.
+enum PanelItem : uint8_t { PI_COOLANT, PI_VOLTAGE, PI_INTAKE, PI_AFR, PI_THROTTLE, PI_COUNT };
 
 struct Settings {
     uint8_t  theme      = 0;             // index into kThemes
@@ -21,6 +23,7 @@ struct Settings {
     bool     beep       = SHIFT_BEEP;    // shift / warning beeps
     uint8_t  panels     = PANELS_AUTO;
     uint8_t  gearMode   = GEARMODE_AUTO;
+    uint8_t  panelItem[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
     // Panel colour inversion. The build picks the default (esp32dev = inverted panel), but
     // CYD batches differ, so SETUP -> COLORS flips it at runtime and it is saved.
 #ifdef TFT_INVERSION_ON

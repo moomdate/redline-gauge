@@ -13,6 +13,8 @@
 #include "ui/theme.h"
 #include "ui/drag_timer.h"
 #include "ui/timer_ui.h"
+#include "ui/link_ui.h"
+#include "data/link_status.h"
 #include "config.h"
 
 extern uint32_t g_host_ms;
@@ -37,6 +39,8 @@ static void save(const char *path) {
 }
 
 static float g_soc = -1, g_kw = 0;      // hybrid frames: >= 0 publishes HV data
+static float g_afr = -1;                // HONDA K frames: >= 0 publishes AFR
+static float g_tps = -1;                // >= 0 publishes throttle
 static bool  g_gearOff = false;
 
 static void staticFrame(const char *path, float rpm, float spd, float clt, float v, float iat, int gear,
@@ -59,6 +63,8 @@ static void staticFrame(const char *path, float rpm, float spd, float clt, float
         if (iat > -99) bus::publish(CH_IAT, iat);
         if (gear >= 0) bus::publish(CH_GEAR, gear);
         if (g_soc >= 0) { bus::publish(CH_HV_SOC, g_soc); bus::publish(CH_HV_KW, g_kw); }
+        if (g_afr >= 0) bus::publish(CH_AFR, g_afr);
+        if (g_tps >= 0) bus::publish(CH_THROTTLE, g_tps);
         GaugeSnapshot s;
         bus::snapshot(s);
         m.update(s, g_host_ms, mode, view);
@@ -147,7 +153,87 @@ int main() {
     staticFrame("out/hybrid_regen.ppm", 1250, 63, 88, 12.4f, 35, -1, Link::Live, "", "OBD BT");
     g_soc = -1; g_gearOff = false;
     gauge_ui::setTheme(kThemes[THEME_AMBER]);
-    staticFrame("out/hondatest.ppm", 1400, 72, 90, 13.8f, 31, -1, Link::Live, "M d[15]", "HONDA TEST");
+    // HONDA K / OBD BT: link pill in each state, selectable panels (AFR, THROTTLE), link pages
+    {
+        auto addRow = [](LinkStatus &k, const char *key, const char *val, bool bad) {
+            LinkRow &r = k.rows[k.rowCount++];
+            snprintf(r.key, sizeof r.key, "%s", key);
+            snprintf(r.value, sizeof r.value, "%s", val);
+            r.bad = bad;
+        };
+        LinkStatus k;
+        snprintf(k.title, sizeof k.title, "K-LINE");
+        snprintf(k.subtitle, sizeof k.subtitle, "HONDA ECU LINK");
+        k.state = LS_LIVE; k.connects = 1; k.rate = 17;
+        k.liveSince = 100000 - 83000; k.lastReply = 100000 + 1980;
+        gauge_ui::setLink(&k, 100000 + 1980);
+        const uint8_t hondaItems[3] = { PI_COOLANT, PI_VOLTAGE, PI_AFR };
+        gauge_ui::setPanelItems(hondaItems);
+        g_afr = 14.6f;
+        staticFrame("out/honda_live.ppm", 1450, 0, 92, 13.6f, -100, -1, Link::Live, "", "HONDA K");
+        g_afr = 13.1f;
+        gauge_ui::setTheme(kThemes[THEME_LIME]);
+        staticFrame("out/honda_rich.ppm", 6200, 0, 98, 13.9f, -100, -1, Link::Live, "", "HONDA K");
+        const uint8_t tpsItems[3] = { PI_THROTTLE, PI_INTAKE, PI_AFR };
+        gauge_ui::setPanelItems(tpsItems);
+        g_afr = 15.6f; g_tps = 37;
+        gauge_ui::setTheme(kThemes[THEME_ICE]);
+        staticFrame("out/honda_tps.ppm", 3100, 0, 96, 13.8f, 33, -1, Link::Live, "", "HONDA K");
+        g_afr = -1; g_tps = -1;
+        gauge_ui::setPanelItems(hondaItems);
+        k.state = LS_RETRY; snprintf(k.reason, sizeof k.reason, "NO ECU"); k.retryAt = 100000 + 1980 + 1600;
+        k.drops = 1; k.rate = 0;
+        staticFrame("out/honda_noecu.ppm", -1, -1, -100, -1, -100, -1, Link::Error, "NO ECU", "HONDA K");
+        snprintf(k.reason, sizeof k.reason, "K-LINE LOW");
+        staticFrame("out/honda_low.ppm", -1, -1, -100, -1, -100, -1, Link::Error, "K-LINE LOW", "HONDA K");
+        k.state = LS_CONNECTING; snprintf(k.step, sizeof k.step, "WAKE-UP");
+        staticFrame("out/honda_linking.ppm", -1, -1, -100, -1, -100, -1, Link::Connecting, "K-LINE INIT", "HONDA K");
+
+        LinkStatus o;
+        snprintf(o.title, sizeof o.title, "OBD BT");
+        snprintf(o.subtitle, sizeof o.subtitle, "ELM327 BLUETOOTH");
+        o.state = LS_CONNECTING; snprintf(o.step, sizeof o.step, "BT PAIRING");
+        const uint8_t stdItems[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+        gauge_ui::setPanelItems(stdItems);
+        gauge_ui::setLink(&o, 100000 + 1980);
+        staticFrame("out/obd_pairing.ppm", -1, -1, -100, -1, -100, -1, Link::Connecting, "BT PAIRING", "OBD BT");
+        o.state = LS_RETRY; snprintf(o.reason, sizeof o.reason, "NO ADAPTER"); o.retryAt = 100000 + 1980 + 2500;
+        snprintf(o.hint, sizeof o.hint, "Adapter not found: plugged in? powered?");
+        staticFrame("out/obd_noadapter.ppm", -1, -1, -100, -1, -100, -1, Link::Error, "NO ADAPTER", "OBD BT");
+        o.state = LS_LIVE; o.connects = 1; o.liveSince = 1000;
+        staticFrame("out/obd_live.ppm", 2400, 64, 88, 14.1f, 36, 3, Link::Live, "", "OBD BT");
+        gauge_ui::setLink(nullptr, 0);
+
+        Settings st;
+        st.theme = THEME_ICE;
+        LinkStatus live = k;
+        live.state = LS_LIVE; live.connects = 3; live.drops = 2; live.rate = 17; live.liveSince = 1000; live.lastReply = 84000;
+        live.rowCount = 0;
+        addRow(live, "ECHO", "YES", false); addRow(live, "K-LINE IDLE", "OK", false);
+        addRow(live, "O2 SENSOR", "0.44 V", false); addRow(live, "AFR (EST.)", "14.7", false);
+        link_ui::invalidate();
+        link_ui::render(live, 84200, st);
+        save("out/link_honda_live.ppm");
+        LinkStatus off = live;
+        off.state = LS_RETRY; snprintf(off.reason, sizeof off.reason, "NO ECU"); off.retryAt = 86000;
+        snprintf(off.hint, sizeof off.hint, "Wiring OK, ECU silent: ignition ON?");
+        off.drops = 3; off.lastReply = 80000;
+        st.theme = THEME_AMBER;
+        link_ui::invalidate();
+        link_ui::render(off, 84200, st);
+        save("out/link_honda_noecu.ppm");
+        LinkStatus ob = o;
+        ob.state = LS_RETRY; snprintf(ob.reason, sizeof ob.reason, "BT LOST"); ob.retryAt = 85200;
+        snprintf(ob.hint, sizeof ob.hint, "Bluetooth dropped: adapter unplugged?");
+        ob.connects = 2; ob.drops = 2; ob.lastReply = 81000; ob.rowCount = 0;
+        addRow(ob, "BLUETOOTH", "--", false); addRow(ob, "ADAPTER", "3C:9E:51", false); addRow(ob, "PIDS", "28", false);
+        st.theme = THEME_LIME;
+        link_ui::invalidate();
+        link_ui::render(ob, 84200, st);
+        save("out/link_obd_lost.ppm");
+        gauge_ui::setPanelItems(stdItems);
+        gauge_ui::setTheme(kThemes[THEME_ICE]);
+    }
     staticFrame("out/nodata.ppm", -1, -1, -100, -1, -100, -1, Link::Connecting, "BT PAIRING", "OBD BT");
 
     // ---- run the AUTO simulator for 150 s of virtual time ----

@@ -10,7 +10,7 @@
 
 namespace settings_ui {
 
-const char *const kSourceLabels[SRC_COUNT] = { "SIM", "TOUCH", "SERIAL", "OBD BT", "CUSTOM", "HONDA", "H TEST" };
+const char *const kSourceLabels[SRC_COUNT] = { "SIM", "TOUCH", "SERIAL", "OBD BT", "CUSTOM", "HONDA" };
 
 // ---- layout ----------------------------------------------------------------------
 struct Rect { int x, y, w, h; };
@@ -108,7 +108,7 @@ static void compose(Canvas &cv, const Settings &s) {
     for (int i = 0; i < THEME_COUNT; i++) themeThumb(cv, t, i, i == s.theme);
 
     cv.text(font_small, 12, 148, "DATA SOURCE", C(C_MUTED), ALIGN_LEFT, 1);
-    // six sources: the compact font keeps every label clear of the button edges
+    // the compact font keeps every label clear of the button edges
     for (int i = 0; i < SRC_COUNT; i++) button(cv, t, sourceBtn(i), kSourceLabels[i], i == s.source, font_small);
 
     char buf[16];

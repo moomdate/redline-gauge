@@ -39,8 +39,8 @@ int estimateGear(float rpm, float speedKmh) {
 void GaugeModel::reset(uint32_t now) {
     t0_ = now;
     last_ = now;
-    rpmSmooth_ = speedSmooth_ = 0;
-    hybridSeen_ = false;
+    rpmSmooth_ = speedSmooth_ = afrSmooth_ = 0;
+    hybridSeen_ = afrSeen_ = false;
     resetPeaks();
 }
 
@@ -108,6 +108,20 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
     v.iat = (int)lroundf(s.value[CH_IAT]);
     v.iatLvl = v.iat >= IAT_CRIT ? LV_CRIT : v.iat >= IAT_WARN ? LV_WARN : LV_NORMAL;
 
+    // AFR from a narrowband O2 sensor flips rich/lean about once a second: show the average.
+    v.afrValid = fresh(s, CH_AFR, now);
+    if (v.afrValid) {
+        afrSmooth_ = afrSeen_ ? approach(afrSmooth_, s.value[CH_AFR], dt, 900.0f) : s.value[CH_AFR];
+        afrSeen_ = true;
+    }
+    v.afr = afrSmooth_;
+    v.afrLvl = v.afr < AFR_RICH ? LV_WARN : v.afr > AFR_LEAN ? LV_COLD : LV_NORMAL;
+
+    v.tpsValid = fresh(s, CH_THROTTLE, now);
+    v.tps = (int)lroundf(s.value[CH_THROTTLE]);
+    if (v.tps < 0) v.tps = 0;
+    if (v.tps > 100) v.tps = 100;
+
     v.socValid = fresh(s, CH_HV_SOC, now);
     v.soc = (int)lroundf(s.value[CH_HV_SOC]);
     v.socLvl = v.soc <= SOC_LOW_CRIT ? LV_CRIT : v.soc <= SOC_LOW_WARN ? LV_WARN : LV_NORMAL;
@@ -126,14 +140,6 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
         case Link::Connecting:v.dotColor = 0xf5df3c; v.dotOn = slow; break;
         case Link::Error:     v.dotColor = 0xff4741; v.dotOn = true; break;
         default:              v.dotColor = 0x6c7a84; v.dotOn = true; break;
-    }
-    v.testTag[0] = 0;
-    v.testLetter = 0;
-    int idx;
-    char letter;
-    if (modeName && !strcmp(modeName, "HONDA TEST") && sscanf(s.linkMsg, "%c d[%d]", &letter, &idx) == 2) {
-        snprintf(v.testTag, sizeof v.testTag, "d[%d]", idx);
-        v.testLetter = letter;
     }
     if (s.linkMsg[0]) {
         snprintf(v.right, sizeof(v.right), "%s", s.linkMsg);

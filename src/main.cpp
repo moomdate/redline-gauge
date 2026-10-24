@@ -24,6 +24,7 @@
 #include "data/obd_source.h"
 #include "data/custom_source.h"
 #include "data/honda_source.h"
+#include "ui/link_ui.h"
 #include "ui/gauge_model.h"
 #include "ui/gauge_ui.h"
 #include "ui/settings_ui.h"
@@ -76,8 +77,7 @@ static SerialSource serialSrc;
 static ObdSource    obdSrc;
 static CustomSource customSrc;
 static HondaKSource hondaSrc;
-static HondaKSource hondaTest(true);
-static DataSource *const sources[SRC_COUNT] = { &simAuto, &simTouch, &serialSrc, &obdSrc, &customSrc, &hondaSrc, &hondaTest };
+static DataSource *const sources[SRC_COUNT] = { &simAuto, &simTouch, &serialSrc, &obdSrc, &customSrc, &hondaSrc };
 
 static volatile int requestedSrc = SRC_SIM_AUTO;
 static volatile int activeSrc = -1;
@@ -95,9 +95,13 @@ static void loadSettings() {
     settings.panels     = prefs.getUChar("panels", settings.panels);
     settings.gearMode   = prefs.getUChar("gearm", settings.gearMode);
     settings.invert     = prefs.getBool("invert", settings.invert);
+    uint8_t items[3];
+    if (prefs.getBytesLength("pitems") == sizeof items && prefs.getBytes("pitems", items, sizeof items) == sizeof items)
+        for (int i = 0; i < 3; i++) if (items[i] < PI_COUNT) settings.panelItem[i] = items[i];
     if (settings.panels >= PANELS_COUNT) settings.panels = PANELS_AUTO;
     if (settings.gearMode >= GEARMODE_COUNT) settings.gearMode = GEARMODE_AUTO;
     if (settings.theme >= THEME_COUNT) settings.theme = 0;
+    if (settings.source == SRC_COUNT) settings.source = SRC_HONDA;   // 1.6.9 and older: H TEST (gone)
     if (settings.source >= SRC_COUNT) settings.source = SRC_SIM_AUTO;
     settings.shiftRpm = constrain(settings.shiftRpm, Settings::kShiftMin, Settings::kShiftMax);
     settings.brightness = constrain(settings.brightness, Settings::kBrightMin, 100);
@@ -112,6 +116,9 @@ static void saveSettings() {   // Preferences only writes keys whose value chang
     prefs.putUChar("panels", settings.panels);
     prefs.putUChar("gearm", settings.gearMode);
     prefs.putBool("invert", settings.invert);
+    uint8_t items[3];
+    if (prefs.getBytes("pitems", items, sizeof items) != sizeof items || memcmp(items, settings.panelItem, sizeof items))
+        prefs.putBytes("pitems", settings.panelItem, sizeof settings.panelItem);
 }
 
 static void backlightBegin() {
@@ -144,7 +151,7 @@ static GaugeModel model;
 static void printHelp() {
     Serial.println(F(
         "\n=== REDLINE " REDLINE_VERSION " — crafted by birdlab.th (birdlab.moomdate.tech) ===\n"
-        "  mode=sim|touch|serial|obd|custom|honda|hondatest   theme=ice|lime|amber   shift=7000\n"
+        "  mode=sim|touch|serial|obd|custom|honda   theme=ice|lime|amber   shift=7000\n"
         "  bright=20..100   beep=on|off   peak=reset   help\n"
         "  panels=auto|standard|hybrid   gearmode=auto|off   invert=on|off (panel colours)\n"
         "  touchcal (or BOOT button)   touchcal=reset   touchcal=xmin,xmax,ymin,ymax,axis\n"
@@ -179,7 +186,7 @@ static void handleLine(char *line) {
     bool changed = true;
 
     if (keyIs(p, "mode", &v)) {
-        static const char *const keys[SRC_COUNT] = { "sim", "touch", "serial", "obd", "custom", "honda", "hondatest" };
+        static const char *const keys[SRC_COUNT] = { "sim", "touch", "serial", "obd", "custom", "honda" };
         int found = -1;
         for (int i = 0; i < SRC_COUNT; i++) if (!strncasecmp(v, keys[i], strlen(keys[i]))) found = i;
         if (!strncasecmp(v, "auto", 4)) found = SRC_SIM_AUTO;
@@ -261,7 +268,7 @@ static void handleLine(char *line) {
     } else if (!strncasecmp(p, "kdump", 5)) {
         HondaKSource::dumpOn = !HondaKSource::dumpOn;
         Serial.printf("[gauge] K-line table dump %s%s\n", HondaKSource::dumpOn ? "ON" : "OFF",
-                      activeSrc == SRC_HONDA || activeSrc == SRC_HONDA_TEST ? "" : " (needs mode=honda)");
+                      activeSrc == SRC_HONDA ? "" : " (needs mode=honda)");
         return;
     } else if (!strncasecmp(p, "bench", 5)) {
         runBench();
@@ -403,7 +410,7 @@ static void updateOutputs(const GaugeView *v) {
 }
 
 // ---- screens ------------------------------------------------------------------------------------
-enum Screen { SCR_GAUGE, SCR_SETTINGS, SCR_TIMER, SCR_LOG };
+enum Screen { SCR_GAUGE, SCR_SETTINGS, SCR_TIMER, SCR_LOG, SCR_LINK };
 static Screen screen = SCR_GAUGE;
 
 // ---- drag timer ---------------------------------------------------------------------------------
@@ -488,6 +495,7 @@ static void applySettings(const Settings &next, bool repaint) {
     model.setShiftRpm(next.shiftRpm);
     model.setPanels(next.panels);
     model.setGearHidden(next.gearMode == GEARMODE_OFF);
+    gauge_ui::setPanelItems(next.panelItem);
     SimSource::hybrid = next.panels == PANELS_HYBRID;
     if (screen == SCR_GAUGE) {
         if (next.theme != prev.theme) gauge_ui::setTheme(kThemes[next.theme]);
@@ -515,6 +523,12 @@ static void runTouchCal() {
     repaintScreen();
 }
 
+static void openLink() {
+    screen = SCR_LINK;
+    SimSource::touchThrottle = 0;
+    link_ui::invalidate();                         // drawn by loop() from the live link status
+}
+
 static void closeSettings() {
     screen = SCR_GAUGE;
     gauge_ui::setTheme(kThemes[settings.theme]);   // repaint background + all regions
@@ -525,6 +539,7 @@ static void repaintScreen() {                      // after something drew over 
         case SCR_SETTINGS: settings_ui::draw(settings); break;
         case SCR_TIMER:    backToTimer(); break;
         case SCR_LOG:      timer_ui::drawLog(runLog); break;
+        case SCR_LINK:     link_ui::invalidate(); break;
         default:           gauge_ui::setTheme(kThemes[settings.theme]); break;
     }
 }
@@ -571,6 +586,8 @@ static bool readTouch(int &x, int &y) {
     x = px; y = py;
     return down;
 }
+
+static GaugeView g_view;                           // last frame's view (taps on the panels read it)
 
 static void handleTouch() {
     static bool down = false, longDone = false;
@@ -620,6 +637,14 @@ static void handleTouch() {
         return;
     }
 
+    if (screen == SCR_LINK) {
+        if (!pressed && down) {
+            down = false;
+            if (link_ui::tap(sx, sy) == link_ui::ACT_BACK) { click(); closeSettings(); }
+        }
+        return;
+    }
+
     if (screen == SCR_LOG) {
         if (!pressed && down) {
             down = false;
@@ -649,8 +674,17 @@ static void handleTouch() {
 
     if (!pressed && down) {
         down = false;
-        if (!longDone && millis() - downAt < 600 &&
-            (gauge_ui::hitSetup(sx, sy) || gauge_ui::hitStatus(sx, sy))) {
+        int panel = gauge_ui::hitPanel(sx, sy, g_view);
+        if (!longDone && millis() - downAt < 600 && panel >= 0) {
+            Settings s = settings;                       // tap a side panel: next value
+            s.panelItem[panel] = gauge_ui::nextPanelItem(panel, g_view);
+            click();
+            applySettings(s, false);
+        } else if (!longDone && millis() - downAt < 600 && gauge_ui::hitLink(sx, sy)) {
+            click();
+            openLink();                                  // HONDA K / OBD BT: the pill opens the link page
+        } else if (!longDone && millis() - downAt < 600 &&
+                   (gauge_ui::hitSetup(sx, sy) || gauge_ui::hitStatus(sx, sy))) {
             click();
             openSettings();
         }
@@ -751,6 +785,7 @@ void setup() {
     model.setShiftRpm(settings.shiftRpm);
     model.setPanels(settings.panels);
     model.setGearHidden(settings.gearMode == GEARMODE_OFF);
+    gauge_ui::setPanelItems(settings.panelItem);
     SimSource::hybrid = settings.panels == PANELS_HYBRID;
     requestedSrc = settings.source;
 
@@ -761,7 +796,7 @@ void setup() {
 }
 
 void loop() {
-    static GaugeView view;
+    GaugeView &view = g_view;
     static int shownSrc = -2;
     static uint32_t nextFrame = 0, statAt = 0, frames = 0, pushes = 0;
 
@@ -782,7 +817,15 @@ void loop() {
     now = millis();          // read AFTER the snapshot: no stamp in it can be newer than `now`
     model.update(snap, now, src >= 0 ? sources[src]->name() : "", view);
 
-    if (screen == SCR_GAUGE) {
+    static LinkStatus link;
+    bool hasLink = src >= 0 && sources[src]->linkStatus(link);
+    gauge_ui::setLink(hasLink ? &link : nullptr, now);
+    if (screen == SCR_LINK && !hasLink) closeSettings();  // source changed over serial
+
+    if (screen == SCR_LINK) {
+        link_ui::render(link, now, settings);
+        updateOutputs(nullptr);
+    } else if (screen == SCR_GAUGE) {
         gauge_ui::render(view);
         updateOutputs(&view);
         pushes += gauge_ui::lastPushedRegions();

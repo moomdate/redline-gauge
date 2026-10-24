@@ -8,13 +8,14 @@
 //   checksum: all bytes of the frame sum to 0 (mod 256)
 // Session (Wave 110i / 125i): wake pulse (K low 70 ms, high 130 ms) -> ping FE 04 72 8C
 //   (-> 0E 04 72 7C) -> init 72 05 00 F0 99 (-> 02 04 00 FA; some ECUs stay quiet)
-//   -> poll table 0x17: 72 05 71 17 01
+//   -> poll table 0x17: 72 05 71 17 01, and the O2 sensor in table 0x20: 72 05 71 20 F8
 #include <stdint.h>
 #include <stddef.h>
 
 static const uint8_t HK_PING[] = { 0xFE, 0x04, 0x72, 0x8C };
 static const uint8_t HK_INIT[] = { 0x72, 0x05, 0x00, 0xF0, 0x99 };
 static const uint8_t HK_TABLE = 0x17;
+static const uint8_t HK_TABLE_O2 = 0x20;
 
 inline uint8_t hkChecksum(const uint8_t *b, size_t n) {
     uint8_t s = 0;
@@ -63,4 +64,28 @@ inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) {
     d.iat = p[7] - 40.0f;
     d.batt = p[10] / 10.0f;
     return true;
+}
+
+// Table 0x20, O2 sensor: 02 08 71 20 <o2> <fuel trim, 0x80 = 0 %> 00 <cs>
+// (a Wave 100i sends exactly these 3 data bytes; a reply of another length is ignored).
+inline bool hkDecodeO2(const uint8_t *f, size_t n, uint8_t &o2Raw) {
+    if (!hkIsTableReply(f, n, HK_TABLE_O2) || n != 4 + 3 + 1) return false;
+    o2Raw = f[4];
+    return true;
+}
+
+// O2 sensor volts. A Wave 100i at idle swings between 0x12 and 0xC3: 0.07 / 0.76 V on a
+// 1 V scale, the range a narrowband sensor works in (on a 5 V scale 0xC3 would be 3.8 V).
+inline float hkO2Volts(uint8_t raw) { return raw / 256.0f; }
+
+// Air-fuel ratio estimated from a narrowband sensor: it only tells rich from lean around
+// 14.7, so this is a rough guide (a real AFR reading needs a wideband sensor).
+inline float hkAfrFromO2(float volts) {
+    static const float V[]   = { 0.00f, 0.10f, 0.20f, 0.45f, 0.60f, 0.75f, 0.90f, 1.00f };
+    static const float AFR[] = { 15.8f, 15.4f, 15.1f, 14.7f, 14.2f, 13.6f, 13.0f, 12.6f };
+    const int n = sizeof V / sizeof V[0];
+    if (volts <= V[0]) return AFR[0];
+    for (int i = 1; i < n; i++)
+        if (volts <= V[i]) return AFR[i - 1] + (volts - V[i - 1]) / (V[i] - V[i - 1]) * (AFR[i] - AFR[i - 1]);
+    return AFR[n - 1];
 }

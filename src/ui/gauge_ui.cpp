@@ -48,6 +48,9 @@ static const uint16_t *s_bg = nullptr;
 static PushFn    s_push = nullptr;
 static char      s_key[RG_COUNT][64];         // what each region last showed
 static int       s_pushed = 0;
+static const LinkStatus *s_kl = nullptr;      // ECU link of the source, nullptr = none
+static uint32_t  s_klNow = 0;
+static int       s_pillX = 0;                  // left edge of the K-line pill, 0 = none
 
 static inline uint16_t C(uint32_t rgb) { return rgb565(rgb); }
 
@@ -97,20 +100,86 @@ static uint32_t levelColor(Level lv, uint32_t normal, bool blink) {
 }
 
 // ---- status bar ---------------------------------------------------------------
+// Link pill: what the source's ECU link is doing, at a glance.
+//   live      green dot  "ECU OK"
+//   working   amber ring "LINKING" / the step, e.g. "BT PAIRING" (ring blinks)
+//   no answer red cross  "NO ECU 2s"   (reason + seconds to the next try)
+struct Pill { uint32_t color; int icon; char text[16], brief[16]; };   // icon: 0 dot, 1 ring, 2 cross
+
+static Pill linkPill(const LinkStatus &k, uint32_t now, bool blink) {
+    Pill p = { s_theme->good, 0, "ECU OK", "ECU OK" };
+    if (k.state == LS_CONNECTING || k.state == LS_OFF) {
+        // the step when it fits ("BT PAIRING", "ELM INIT" ...), else LINKING
+        const char *step = k.step[0] && strlen(k.step) <= 10 && strcmp(k.step, "WAKE-UP") ? k.step : "LINKING";
+        p = { s_theme->warning, blink ? 1 : 3, "", "LINKING" };
+        snprintf(p.text, sizeof p.text, "%s", step);
+    } else if (k.state == LS_RETRY) {
+        int32_t left = (int32_t)(k.retryAt - now);
+        int sec = left > 0 ? (left + 999) / 1000 : 0;
+        // short words: the pill shares the bar with "REDLINE" and the source name
+        const char *why = !strcmp(k.reason, "NO K-LINE") ? "NO LINE"
+                        : !strcmp(k.reason, "K-LINE LOW") ? "LINE LOW"
+                        : k.reason[0] ? k.reason : "NO ECU";
+        p = { C_CRIT, 2, "", "" };
+        snprintf(p.brief, sizeof p.brief, "%s", why);              // without the countdown
+        if (sec > 0) snprintf(p.text, sizeof p.text, "%s %ds", why, sec);
+        else snprintf(p.text, sizeof p.text, "%s", why);
+    }
+    return p;
+}
+
+static void drawPillIcon(int icon, float cx, float cy, uint16_t c) {
+    if (icon == 0) { cv.fillCircle(cx, cy, 2.6f, c); return; }
+    if (icon == 1) {                                   // ring
+        cv.fillCircle(cx, cy, 3.2f, c);
+        cv.fillCircle(cx, cy, 1.7f, C(0x101418));
+        return;
+    }
+    if (icon == 3) return;                             // ring, blink-off phase
+    for (int i = -3; i <= 3; i++) {                    // cross, 2 px strokes
+        cv.blendPixel((int)cx + i, (int)cy + i, c, 255);
+        cv.blendPixel((int)cx + i + 1, (int)cy + i, c, 140);
+        cv.blendPixel((int)cx + i, (int)cy - i, c, 255);
+        cv.blendPixel((int)cx + i + 1, (int)cy - i, c, 140);
+    }
+}
+
 static void drawStatus(const GaugeView &v) {
     char key[64];
     uint32_t dot = v.link == Link::Live      ? s_theme->good
                  : v.link == Link::Simulated ? s_theme->accentBright : v.dotColor;
     bool official = splash_ui::authentic();
-    snprintf(key, sizeof key, "%s|%s|%06x|%d|%d", v.mode, v.right, (unsigned)dot, v.dotOn, official);
+    Pill pill = {};
+    if (s_kl) pill = linkPill(*s_kl, s_klNow, ((s_klNow / 350) & 1) == 0);
+    snprintf(key, sizeof key, "%s|%s|%06x|%d|%d|%s|%d|%06x", v.mode, s_kl ? "" : v.right, (unsigned)dot,
+             v.dotOn, official, pill.text, pill.icon, (unsigned)pill.color);
     if (!changed(RG_STATUS, key) || !beginRegion(R_STATUS)) return;
 
-    if (v.dotOn) cv.fillCircle(21.5f, 15.5f, 2.3f, C(dot));
+    if (v.dotOn && !s_kl) cv.fillCircle(21.5f, 15.5f, 2.3f, C(dot));
     if (official) cv.text(font_small, 28, 19, STATUS_TITLE, C(C_STATUS));
     else          cv.text(font_small, 28, 19, "UNOFFICIAL", C(C_CRIT));
     cv.text(font_small, 104, 19, v.mode, C(s_theme->accentBright));
-    bool msg = v.right[0] && (v.right[0] < '0' || v.right[0] > '9');
-    cv.text(font_small, 206, 19, v.right, C(msg ? dot : C_STATUS), ALIGN_RIGHT);
+    if (s_kl) {
+        // rounded-off pill, right-aligned on the bar: tinted fill, 1 px rim, icon, text
+        // never over the source name: drop the countdown when the pill would reach it
+        int modeEnd = 104 + cv.textWidth(font_small, v.mode) + 6;
+        const char *txt = 210 - (cv.textWidth(font_small, pill.text) + 20) < modeEnd ? pill.brief : pill.text;
+        int tw = cv.textWidth(font_small, txt);
+        int w = tw + 20, x = 210 - w, y = 8, h = 13;
+        uint16_t c = C(pill.color);
+        cv.blendRect(x + 1, y, w - 2, h, c, 48);
+        cv.blendRect(x, y + 1, 1, h - 2, c, 48);
+        cv.blendRect(x + w - 1, y + 1, 1, h - 2, c, 48);
+        cv.blendRect(x + 1, y, w - 2, 1, c, 160);
+        cv.blendRect(x + 1, y + h - 1, w - 2, 1, c, 110);
+        drawPillIcon(pill.icon, x + 8.5f, y + 6.5f, c);
+        cv.text(font_small, x + 15, 19, txt, C(pill.icon == 0 ? C_STATUS : pill.color));
+        s_pillX = x;
+    } else {
+        s_pillX = 0;
+        bool msg = v.right[0] && (v.right[0] < '0' || v.right[0] > '9');
+        cv.text(font_small, 206, 19, v.right, C(msg ? dot : C_STATUS), ALIGN_RIGHT);
+    }
     flush();
 }
 
@@ -212,16 +281,19 @@ static void drawRpm(const GaugeView &v) {
         snprintf(peak, sizeof peak, "PEAK %s", p);
     }
     uint32_t color = !v.rpmValid ? C_DIM : v.shift ? C_CRIT : C_WHITE;
+    // no ECU link: say so where the eye goes first (the pill has the details)
+    bool offline = s_kl && s_kl->state == LS_RETRY;
+    if (offline) snprintf(peak, sizeof peak, "NOT CONNECTED");
 
     // both rows are painted by the same code, clipped to their own region
     auto paint = [&]() {
         cv.text(font_small, 19, 75, "ENGINE SPEED", C(C_LABEL), ALIGN_LEFT, 1);
-        if (peak[0]) cv.text(font_small, 206, 75, peak, C(0x6f808b), ALIGN_RIGHT);
+        if (peak[0]) cv.text(font_small, 206, 75, peak, C(offline ? C_CRIT : 0x6f808b), ALIGN_RIGHT);
         int w = cv.text(font_rpm, 18, 118, num, C(color), ALIGN_LEFT, 0, true);
         cv.text(font_small, 18 + w + 8, 118, "RPM", C(s_theme->accentBright), ALIGN_LEFT, 1);
     };
     char key[64];
-    snprintf(key, sizeof key, "%s", peak);
+    snprintf(key, sizeof key, "%s|%d", peak, offline);
     if (changed(RG_RPM_LBL, key) && beginRegion(R_RPM_LBL)) { paint(); flush(); }
 
     snprintf(key, sizeof key, "%s|%06x", num, (unsigned)color);
@@ -340,6 +412,53 @@ static void drawSetup() {
 
 static const char *s_regionKey(int rg) { return s_key[rg]; }
 
+// ---- selectable panel values ------------------------------------------------------------------
+static uint8_t s_items[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+
+static bool itemValid(uint8_t item, const GaugeView &v) {
+    switch (item) {
+        case PI_COOLANT:  return v.coolValid;
+        case PI_VOLTAGE:  return v.voltValid;
+        case PI_INTAKE:   return v.iatValid;
+        case PI_AFR:      return v.afrValid;
+        case PI_THROTTLE: return v.tpsValid;
+        default:          return false;
+    }
+}
+
+static void drawItem(int i, uint8_t item, const GaugeView &v) {
+    char buf[12];
+    switch (item) {
+    case PI_VOLTAGE:
+        snprintf(buf, sizeof buf, "%.1f", v.volt);
+        drawPanel(i, PANEL2_LABEL, v.voltValid, buf, "V", levelColor(v.voltLvl, s_theme->good, v.blink),
+                  (v.volt - VOLT_BAR_MIN) / (VOLT_BAR_MAX - VOLT_BAR_MIN));
+        break;
+    case PI_INTAKE:
+        snprintf(buf, sizeof buf, "%d", v.iat);
+        drawPanel(i, PANEL3_LABEL, v.iatValid, buf, "°C", levelColor(v.iatLvl, C_VALUE, v.blink),
+                  (v.iat - IAT_BAR_MIN) / (float)(IAT_BAR_MAX - IAT_BAR_MIN));
+        break;
+    case PI_AFR: {
+        // narrowband estimate: the word says what it means, the number is a guide
+        snprintf(buf, sizeof buf, "%.1f", v.afr);
+        const char *unit = v.afrLvl == LV_WARN ? "RICH" : v.afrLvl == LV_COLD ? "LEAN" : "OK";
+        drawPanel(i, "AFR", v.afrValid, buf, v.afrValid ? unit : "", levelColor(v.afrLvl, s_theme->good, v.blink),
+                  (v.afr - AFR_BAR_MIN) / (AFR_BAR_MAX - AFR_BAR_MIN));
+        break;
+    }
+    case PI_THROTTLE:
+        snprintf(buf, sizeof buf, "%d", v.tps);
+        drawPanel(i, "THROTTLE", v.tpsValid, buf, "%", s_theme->accentBright, v.tps / 100.0f);
+        break;
+    default:
+        snprintf(buf, sizeof buf, "%d", v.coolant);
+        drawPanel(i, PANEL1_LABEL, v.coolValid, buf, "°C", levelColor(v.coolLvl, C_VALUE, v.blink),
+                  (v.coolant - COOLANT_BAR_MIN) / (float)(COOLANT_BAR_MAX - COOLANT_BAR_MIN));
+        break;
+    }
+}
+
 // ---- public -------------------------------------------------------------------------------
 namespace gauge_ui {
 
@@ -381,15 +500,9 @@ void render(const GaugeView &v) {
     drawStatus(v);
     drawSetup();
 
-    char buf[12];
-    snprintf(buf, sizeof buf, "%d", v.coolant);
-    drawPanel(0, PANEL1_LABEL, v.coolValid, buf, "°C", levelColor(v.coolLvl, C_VALUE, v.blink),
-              (v.coolant - COOLANT_BAR_MIN) / (float)(COOLANT_BAR_MAX - COOLANT_BAR_MIN));
-    if (v.testTag[0]) {                                // HONDA TEST: which byte is on SPEED
-        char label[16];
-        snprintf(label, sizeof label, "SPEED TEST %c", v.testLetter);
-        drawPanel(1, label, true, v.testTag, "", s_theme->warning, 0);
-    } else if (v.hybrid) {
+    if (v.hybrid) {
+        drawItem(0, s_items[0], v);
+        char buf[12];
         snprintf(buf, sizeof buf, "%d", v.soc);
         drawPanel(1, HYBRID_PANEL2_LABEL, v.socValid, buf, "%", levelColor(v.socLvl, s_theme->good, v.blink),
                   v.soc / 100.0f);
@@ -400,14 +513,13 @@ void render(const GaugeView &v) {
         drawPanel(2, HYBRID_PANEL3_LABEL, v.kwValid, buf, "kW", kw < 0 ? s_theme->good : C_VALUE,
                   fabsf(kw) / HVKW_BAR_MAX);
         return;
-    } else {
-        snprintf(buf, sizeof buf, "%.1f", v.volt);
-        drawPanel(1, PANEL2_LABEL, v.voltValid, buf, "V", levelColor(v.voltLvl, s_theme->good, v.blink),
-                  (v.volt - VOLT_BAR_MIN) / (VOLT_BAR_MAX - VOLT_BAR_MIN));
     }
-    snprintf(buf, sizeof buf, "%d", v.iat);
-    drawPanel(2, PANEL3_LABEL, v.iatValid, buf, "°C", levelColor(v.iatLvl, C_VALUE, v.blink),
-              (v.iat - IAT_BAR_MIN) / (float)(IAT_BAR_MAX - IAT_BAR_MIN));
+    for (int i = 0; i < 3; i++) drawItem(i, s_items[i], v);
+}
+
+void setLink(const LinkStatus *st, uint32_t now) {
+    s_kl = st;
+    s_klNow = now;
 }
 
 int lastPushedRegions() { return s_pushed; }
@@ -415,6 +527,32 @@ Canvas &canvas() { return cv; }
 PushFn pushFn() { return s_push; }
 
 bool hitStatus(int x, int y) { return y < 26 && x < 215; }
+void setPanelItems(const uint8_t items[3]) {
+    for (int i = 0; i < 3; i++) s_items[i] = items[i] < PI_COUNT ? items[i] : PI_COOLANT;
+}
+
+int hitPanel(int x, int y, const GaugeView &v) {
+    if (x < 222 || y >= 209) return -1;                // the SETUP button sits just below
+    for (int i = 0; i < 3; i++) {
+        Rect r = panelRect(i);
+        if (y >= r.y - 2 && y < r.y + r.h + 2) return v.hybrid && i > 0 ? -1 : i;
+    }
+    return -1;
+}
+
+uint8_t nextPanelItem(int i, const GaugeView &v) {
+    bool any = false;
+    for (int k = 0; k < PI_COUNT; k++) any |= itemValid(k, v);
+    for (int step = 1; step < PI_COUNT; step++) {
+        uint8_t c = (s_items[i] + step) % PI_COUNT;
+        bool shown = false;
+        for (int j = 0; j < 3; j++) shown |= j != i && s_items[j] == c && !(v.hybrid && j > 0);
+        if (!shown && (!any || itemValid(c, v))) return c;
+    }
+    return s_items[i];
+}
+
+bool hitLink(int x, int y)   { return s_pillX && y < 30 && x >= s_pillX - 8 && x < 218; }
 bool hitSetup(int x, int y)  { return x >= 248 && y >= 210; }
 bool hitMain(int x, int y)   { return x < 215 && y >= 26; }
 

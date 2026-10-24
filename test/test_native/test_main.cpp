@@ -656,6 +656,62 @@ static void test_timer_ui_partial_pushes() {
 }
 
 // ---- Honda K-line ------------------------------------------------------------------------------
+static void test_honda_o2_afr() {
+    // real Wave 100i O2 frames: 3 data bytes (O2, trim 0x80, 00)
+    const uint8_t rich[] = { 0x02, 0x08, 0x71, 0x20, 0xC3, 0x80, 0x00, 0x22 };
+    const uint8_t lean[] = { 0x02, 0x08, 0x71, 0x20, 0x12, 0x80, 0x00, 0xD3 };
+    uint8_t raw = 0;
+    TEST_ASSERT_TRUE(hkDecodeO2(rich, sizeof rich, raw));
+    TEST_ASSERT_EQUAL_HEX8(0xC3, raw);
+    TEST_ASSERT_TRUE(hkDecodeO2(lean, sizeof lean, raw));
+    TEST_ASSERT_EQUAL_HEX8(0x12, raw);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.76f, hkO2Volts(0xC3));
+    TEST_ASSERT_TRUE(hkAfrFromO2(hkO2Volts(0xC3)) < AFR_RICH);       // rich side
+    TEST_ASSERT_TRUE(hkAfrFromO2(hkO2Volts(0x12)) > AFR_LEAN);       // lean side
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 14.7f, hkAfrFromO2(0.45f));      // switch point = stoich
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 15.8f, hkAfrFromO2(-1));         // clamped
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.6f, hkAfrFromO2(5));
+    // a reply of another length (4 data bytes) or table is not an O2 frame
+    uint8_t four[] = { 0x02, 0x09, 0x71, 0x20, 0x17, 0x80, 0xCC, 0x00, 0 };
+    four[8] = hkChecksum(four, 8);
+    TEST_ASSERT_FALSE(hkDecodeO2(four, sizeof four, raw));
+    uint8_t t17[] = { 0x02, 0x08, 0x71, 0x17, 0xC3, 0x80, 0x00, 0 };
+    t17[7] = hkChecksum(t17, 7);
+    TEST_ASSERT_FALSE(hkDecodeO2(t17, sizeof t17, raw));
+}
+
+static void test_afr_panel() {
+    GaugeModel m;
+    GaugeView v;
+    m.reset(1000);
+    bus::clear();
+    bus::publish(CH_AFR, 13.0f);
+    bus::publish(CH_THROTTLE, 42);
+    GaugeSnapshot s;
+    bus::snapshot(s);
+    m.update(s, 1000, "HONDA K", v);
+    TEST_ASSERT_TRUE(v.afrValid);
+    TEST_ASSERT_EQUAL(LV_WARN, v.afrLvl);                            // rich
+    TEST_ASSERT_TRUE(v.tpsValid);
+    TEST_ASSERT_EQUAL_INT(42, v.tps);
+
+    // tap a side panel: next item that has data and isn't on another panel
+    gauge_ui::begin(push, kThemes[0]);
+    const uint8_t items[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+    gauge_ui::setPanelItems(items);
+    TEST_ASSERT_EQUAL_INT(2, gauge_ui::hitPanel(270, 190, v));
+    TEST_ASSERT_EQUAL_INT(0, gauge_ui::hitPanel(270, 50, v));
+    TEST_ASSERT_EQUAL_INT(-1, gauge_ui::hitPanel(100, 190, v));       // main area
+    TEST_ASSERT_EQUAL_INT(-1, gauge_ui::hitPanel(290, 225, v));       // SETUP button
+    TEST_ASSERT_EQUAL_UINT8(PI_AFR, gauge_ui::nextPanelItem(2, v));   // no intake data: skipped
+    const uint8_t items2[3] = { PI_COOLANT, PI_VOLTAGE, PI_AFR };
+    gauge_ui::setPanelItems(items2);
+    TEST_ASSERT_EQUAL_UINT8(PI_THROTTLE, gauge_ui::nextPanelItem(2, v));
+    const uint8_t items3[3] = { PI_COOLANT, PI_VOLTAGE, PI_THROTTLE };
+    gauge_ui::setPanelItems(items3);
+    TEST_ASSERT_EQUAL_UINT8(PI_AFR, gauge_ui::nextPanelItem(2, v));   // wraps, past COOLANT/VOLTAGE (shown)
+}
+
 static void test_honda_kline_frames() {
     // fixed frames from the protocol references must checksum to zero
     TEST_ASSERT_EQUAL_HEX8(0x8C, hkChecksum(HK_PING, 3));
@@ -942,8 +998,9 @@ static void test_settings_taps() {
     TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(260, 80, s));      // same again: no-op
     TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(203, 163, s));  // CUSTOM source
     TEST_ASSERT_EQUAL_UINT8(SRC_CUSTOM, s.source);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(300, 163, s));  // H TEST source
-    TEST_ASSERT_EQUAL_UINT8(SRC_HONDA_TEST, s.source);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(247, 163, s));  // HONDA source
+    TEST_ASSERT_EQUAL_UINT8(SRC_HONDA, s.source);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(300, 163, s));     // no 7th source (H TEST gone)
     TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(280, 14, s));     // DONE
     TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(117, 229, s));
     TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(191, 229, s));  // PANELS cycles
@@ -999,6 +1056,8 @@ int main(int, char **) {
     RUN_TEST(test_obd_supported_pid_mask);
     RUN_TEST(test_obd_hybrid_pids);
     RUN_TEST(test_honda_kline_frames);
+    RUN_TEST(test_honda_o2_afr);
+    RUN_TEST(test_afr_panel);
     RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);
     RUN_TEST(test_drag_timer_lift_and_arming);

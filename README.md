@@ -78,6 +78,12 @@ If the splash is removed or the logo is changed, the status bar shows `UNOFFICIA
 - **BEEP ON/OFF**, **RESET PEAK**, **DONE** to go back
 - **PANEL AUTO / STD / HYB**: right-hand panels. STD = COOLANT · VOLTAGE · INTAKE; HYB = COOLANT · HV BATT (%) · HV POWER (kW, negative = regen);
   AUTO switches to HYB as soon as the source delivers hybrid battery data (e.g. OBD on a Honda e:HEV)
+- **Tap a right-hand panel** on the gauge to change what it shows: COOLANT, VOLTAGE, INTAKE, AFR (HONDA K) or
+  THROTTLE. It steps to the next value that has data and isn't on another panel; the choice is saved.
+- **Link pill** (HONDA K and OBD BT): the status bar shows `● ECU OK`, the connecting step (`BT PAIRING`,
+  `ELM INIT` …) or a red `✕` with the reason and the seconds to the next try; **NOT CONNECTED** shows above the
+  RPM while it is down. Tap the pill for the link page: what to check, next retry, uptime, replies per second,
+  last reply, links / drops, plus K-line echo / O2 / AFR or the Bluetooth adapter / PIDs.
 - **COLORS**: flips the panel colours (inverted / normal) and saves it, for when the screen shows a white background after flashing.
 - **GEAR AUTO / OFF**: OFF hides the gear box — use it on hybrids and CVTs, where an estimated gear means nothing
 
@@ -230,17 +236,21 @@ through its red 4-pin diagnostic connector. Other models may lay out the data di
   - CYD side (CN1): board RX-out → **GPIO 22**, **GPIO 27** → board TX-in, VCC → **3.3 V** (never 5 V), GND.
     Pins: `KLINE_RX_PIN` / `KLINE_TX_PIN` in `config.h`.
 - **What it does**: wakes the ECU (K low 70 ms, high 130 ms), sends `FE 04 72 8C` and `72 05 00 F0 99`,
-  then polls table 0x17 (`72 05 71 17 01`).
-- **Values**: RPM, throttle %, engine temp, battery. No speed or gear: the Wave's speedo is mechanical.
-- **Status bar**:
-  - `K-LINE INIT` while connecting.
-  - `NO K-LINE` when no echo came back: wiring or TX/RX swapped.
-  - `NO ECU` when the wiring echoes but the ECU doesn't answer: ignition off, or a CAN bike.
-- **HONDA TEST** (SETUP → DATA SOURCE → **H TEST**, or `mode=hondatest`) helps find the bytes on a new
-  bike without a laptop. Same link and values, but every 5 s the **SPEED** slot shows a different raw byte of
-  table 0x17, named in the status bar: `A d[4]`, `B d[5]`, `C d[6]` … (one minute per round).
-  Ride or spin the wheel and note which letter follows the speedo. **COOLANT** shows d[5] − 40 next to
-  **INTAKE** d[7] − 40: whichever climbs to ~90 °C after a warm-up is the engine temperature.
+  then polls table 0x17 (`72 05 71 17 01`) and the O2 sensor in table 0x20 four times a second.
+- **Values**: RPM, throttle %, engine temp, battery, intake air (Wave 110i / 125i; not on a Wave 100i) and
+  **AFR**. Tap a right-hand panel to pick which ones show. No speed or gear: the Wave's speedo is mechanical.
+  - AFR is estimated from the stock narrowband O2 sensor, so read it as rich / OK / lean (the word next to
+    the number, amber / green / blue), not as an exact ratio. An exact AFR needs a wideband sensor.
+- **Link pill** on the status bar, re-checked on every reading:
+  - `● ECU OK` live data.
+  - `LINKING` waking the ECU up (up to 4 s).
+  - `✕ NO ECU 2s` the wiring echoes but the ECU doesn't answer (ignition off, or a CAN bike), with the
+    seconds to the next try. A new wake-up runs every 2.5 s until it answers.
+  - `✕ NO LINE`: no echo, check the wiring or swap TX/RX. `✕ LINE LOW`: the K-line stays low (no 12 V
+    on the board, or a short).
+  - While it isn't connected, **NOT CONNECTED** shows in red above the RPM.
+  - **Tap the pill** for the **K-LINE** page: state and what to check, next retry, uptime, replies per second,
+    last reply, links / drops, echo, K-line level, O2 volts and AFR.
 - **`kdump`** over serial prints every table raw once a second and marks the bytes that changed. Use it to
   check the byte layout on a new model: idle, then blip the throttle.
 - Experimental: it has not been run on a bike with REDLINE yet. Please report results.
