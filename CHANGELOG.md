@@ -4,7 +4,7 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
-## [Unreleased]
+## [1.7.0] - 2026-10-24
 
 ### Added
 - **Tap a right-hand panel to choose what it shows**: COOLANT, VOLTAGE, INTAKE, AFR or THROTTLE (new). It
