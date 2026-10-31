@@ -3,8 +3,8 @@
 //
 // Runs as a simple blocking state machine inside the data task:
 //   BT start -> pair/connect -> ELM init (ATZ, ATE0 …) -> find ECU (0100) -> poll PIDs
-// RPM is polled every other request so the shift bar stays responsive (~5-10 Hz on
-// a typical CAN car); speed, coolant, intake temp and battery voltage fill the gaps.
+// RPM is polled every other request so the shift bar stays responsive; standard
+// engine PIDs and optional hybrid PIDs fill the remaining slots.
 // Any failure drops back a step and retries; the status bar shows where it is.
 #include "data/source.h"
 #include <stdint.h>
@@ -32,7 +32,7 @@ private:
     bool     btStarted_ = false;
     uint8_t  slot_ = 0;
     uint8_t  errors_ = 0;
-    uint8_t  noData_[8] = {};        // per-PID "NO DATA" counter, >=3 = unsupported
+    uint8_t  noData_[15] = {};       // per-PID "NO DATA" counter, >=3 = unsupported
     char     resp_[160];
     char     mac_[18] = {};          // adapter to connect to ("" = scan)
     char     pin_[17] = {};           // fixed PIN ("" = cycle the common ones)

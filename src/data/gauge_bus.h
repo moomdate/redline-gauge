@@ -15,6 +15,13 @@ enum Channel : uint8_t {
     CH_HV_SOC,      // hybrid battery state of charge, %
     CH_HV_KW,       // hybrid battery power, kW: + = driving the motor, - = charging / regen
     CH_AFR,         // air-fuel ratio estimated from a narrowband O2 sensor (HONDA K)
+    CH_FUEL_LEVEL,  // fuel tank level, %
+    CH_FUEL_RATE,   // fuel rate, L/h
+    CH_STFT,        // short-term fuel trim, %
+    CH_LTFT,        // long-term fuel trim, %
+    CH_MAP,         // manifold absolute pressure, kPa
+    CH_IGNITION,    // ignition timing advance, deg
+    CH_O2_MV,       // oxygen sensor voltage, mV
     CH_COUNT
 };
 

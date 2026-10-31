@@ -122,6 +122,23 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
     if (v.tps < 0) v.tps = 0;
     if (v.tps > 100) v.tps = 100;
 
+    v.fuelLevelValid = fresh(s, CH_FUEL_LEVEL, now);
+    v.fuelLevel = (int)lroundf(s.value[CH_FUEL_LEVEL]);
+    if (v.fuelLevel < 0) v.fuelLevel = 0;
+    if (v.fuelLevel > 100) v.fuelLevel = 100;
+    v.fuelRateValid = fresh(s, CH_FUEL_RATE, now);
+    v.fuelRate = s.value[CH_FUEL_RATE];
+    v.stftValid = fresh(s, CH_STFT, now);
+    v.stft = s.value[CH_STFT];
+    v.ltftValid = fresh(s, CH_LTFT, now);
+    v.ltft = s.value[CH_LTFT];
+    v.mapValid = fresh(s, CH_MAP, now);
+    v.map = (int)lroundf(s.value[CH_MAP]);
+    v.ignitionValid = fresh(s, CH_IGNITION, now);
+    v.ignition = s.value[CH_IGNITION];
+    v.o2MvValid = fresh(s, CH_O2_MV, now);
+    v.o2Mv = (int)lroundf(s.value[CH_O2_MV]);
+
     v.socValid = fresh(s, CH_HV_SOC, now);
     v.soc = (int)lroundf(s.value[CH_HV_SOC]);
     v.socLvl = v.soc <= SOC_LOW_CRIT ? LV_CRIT : v.soc <= SOC_LOW_WARN ? LV_WARN : LV_NORMAL;

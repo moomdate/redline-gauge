@@ -67,7 +67,9 @@ ls /dev/cu.*                     # หาพอร์ต (เลขเปลี�
 - **BRIGHTNESS** — มีในรุ่น `-dim` (`invert-dim` / `noinvert-dim` หรือตั้ง `BACKLIGHT_DIMMING 1` ใน `config.h`) ปรับได้ 20–100% ส่วนรุ่นธรรมดาเปิดไฟจอเต็มตลอด
 - **BEEP ON/OFF** — เสียงเตือน, **RESET PEAK**, **DONE** กลับหน้าเกจ
 - **PANEL AUTO / STD / HYB** — 3 ช่องด้านขวา: STD = COOLANT · VOLTAGE · INTAKE, HYB = COOLANT · HV BATT (% แบตไฮบริด) · HV POWER (kW, ติดลบ = ชาร์จคืน)
-- **แตะช่องด้านขวา** บนหน้าเกจเพื่อเปลี่ยนค่าที่แสดง: COOLANT, VOLTAGE, INTAKE, AFR (HONDA K) หรือ THROTTLE (คันเร่ง) จะข้ามค่าที่ไม่มีข้อมูลและค่าที่อยู่ช่องอื่นแล้ว และจำค่าที่เลือกไว้
+- **แตะช่องด้านขวา** บนหน้าเกจเพื่อเปลี่ยนค่าที่แสดง: COOLANT, VOLTAGE, INTAKE, AFR (HONDA K), THROTTLE,
+  FUEL LEVEL, FUEL RATE, STFT, LTFT, MAP, IGN ADV หรือ O2 SENSOR (mV) จะข้ามค่าที่ไม่มีข้อมูลสดและค่าที่อยู่ช่องอื่นแล้ว
+  ส่วน RPM, PEAK RPM ของรอบนี้ และ SPEED ยังคงแสดงบนหน้าปัดหลัก
 - **ป้ายสถานะการเชื่อมต่อ** (HONDA K และ OBD BT): `● ECU OK`, ขั้นตอนที่กำลังทำ (`BT PAIRING`, `ELM INIT` …) หรือ `✕` สีแดงพร้อมสาเหตุและวินาทีก่อนลองใหม่ ระหว่างต่อไม่ได้จะขึ้น **NOT CONNECTED** เหนือตัวเลขรอบ แตะที่ป้ายเพื่อดูรายละเอียด
   AUTO = เปลี่ยนเป็น HYB เองเมื่อรถส่งค่าแบตไฮบริดมา (เช่น OBD ของ Honda e:HEV)
 - **COLORS** — สลับสีจอ (invert / ปกติ) แล้วจำไว้ ใช้เมื่อแฟลชแล้วจอขาวหรือสีกลับด้าน
@@ -107,7 +109,9 @@ ls /dev/cu.*                     # หาพอร์ต (เลขเปลี�
 rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
 {"rpm":3200,"speed":86,"coolant":87,"voltage":13.9}
 ```
-ส่งค่าไหนก็ได้ ไม่ต้องครบ ชื่อที่รองรับ: `rpm` · `spd/speed/kmh` · `clt/coolant/ect` · `v/volt/voltage/batt` · `iat/intake` · `gear` · `tps/throttle` · `soc` (% แบตไฮบริด) · `kw` (kW แบตไฮบริด)
+ส่งค่าไหนก็ได้ ไม่ต้องครบ ชื่อที่รองรับ: `rpm` · `spd/speed/kmh` · `clt/coolant/ect` · `v/volt/voltage/batt` · `iat/intake` · `gear` · `tps/throttle`
+· `fuel/fuellevel` (%) · `fuelrate` (L/h) · `stft/ltft` (%) · `map` (kPa) · `ign/ignition` (องศา) · `o2/o2mv` (mV)
+· `soc` (% แบตไฮบริด) · `kw` (kW แบตไฮบริด)
 ทดสอบจาก Mac: `~/.platformio/penv/bin/python tools/serial_feed.py /dev/cu.usbserial-XXXX`
 **ต่อจาก Arduino / บอร์ดอื่น**: ต่อ TX ของบอร์ดนั้น → **GPIO 27** ของ CYD (ช่อง CN1) + GND (ช่องรับอย่างเดียว ไม่แย่ง USB)
 มีตัวอย่าง sketch พร้อมวิธีต่อสายใน **[examples/](examples/README.md)**: `SerialSenderDemo` (ค่าทดสอบ) และ `SerialSenderSensors` (รอบ, ความเร็ว, แบต, อุณหภูมิ)
@@ -125,13 +129,17 @@ rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
 ขั้นตอนที่มันทำเอง: เปิดบลูทูธ → สแกนหา adapter (~10 วินาที) → จับคู่ (ลอง PIN 1234 / 0000 / 6789 / 1111 ให้เอง) → รีเซ็ต ELM → หาโปรโตคอลรถอัตโนมัติ → อ่านค่าวนไป
 - **ก่อนต่อ ตัดมือถือออกจาก ELM327 ก่อน** (ปิดแอป OBD หรือปิดบลูทูธมือถือ) เพราะ ELM327 รับได้ทีละเครื่อง
 - ชื่อไม่ต้องตรงเป๊ะ: เลือกเครื่องที่ชื่อมีคำว่า `OBD`, `ELM`, `V-LINK`, `VEEPEAK`, `KONNWEI`, `Vgate` … ให้อัตโนมัติ แล้วจำ MAC ไว้ บูตครั้งต่อไปต่อได้ทันทีไม่ต้องสแกน
-- อ่าน: รอบ (PID 010C), ความเร็ว (010D), น้ำหล่อเย็น (0105), ไอดี (010F), แบตเตอรี่ (ATRV)
+- อ่าน: รอบ (PID 010C), ความเร็ว (010D), น้ำหล่อเย็น (0105), ไอดี (010F), แบตเตอรี่ (ATRV), TPS (0111),
+  ระดับน้ำมัน (012F), อัตราน้ำมัน (015E), STFT (0106), LTFT (0107), MAP (010B), ignition advance (010E),
+  และ O2 sensor 1 (0114, แสดงเป็น mV)
   และรถไฮบริด: % แบตไฮบริด (015B), กำลังแบตไฮบริด kW (019A) — อ่านเฉพาะค่าที่รถบอกว่ารองรับ
 - **รถไฮบริด เช่น Honda Civic e:HEV**: ตั้ง GEAR เป็น OFF (ไม่มีเกียร์เป็นจังหวะ) ส่วน PANEL AUTO จะสลับเป็น HV BATT / HV POWER เอง
   ตอนวิ่งไฟฟ้าล้วนเครื่องดับ รอบจะเป็น 0 เป็นเรื่องปกติ ถ้าเร่งแล้ว HV POWER ติดลบ ให้ตั้ง `HV_CURRENT_SIGN -1` ใน `config.h`
   Civic e:HEV ไม่ส่งค่าไอดี (010F)
 - อ่านรอบทุกๆ คำสั่งเว้นคำสั่ง เพื่อให้บาร์รอบลื่น (ได้ ~5–10 ครั้ง/วินาทีในรถ CAN ทั่วไป)
 - PID ที่รถไม่รองรับจะข้ามเอง, หลุดการเชื่อมต่อจะต่อใหม่เอง
+- **Honda Forza 350 ปี 2021:** ยังไม่ได้ยืนยัน protocol วินิจฉัยและ PID เฉพาะรุ่น จึงไม่ยืนยันว่า OBD ทั่วไปใช้ได้
+  และห้ามต่อ adapter เข้ากับรถจนกว่าจะตรวจสอบขั้วต่อ วงจร และ protocol จากเอกสาร Honda/แหล่งบริการที่เชื่อถือได้
 - ยังหาไม่เจอ: เปิด `pio device monitor` แล้วดูรายการเครื่องที่สแกนเจอ จากนั้นพิมพ์
   - `obd=AA:BB:CC:DD:EE:FF` เพื่อเลือก adapter เอง (กรณีชื่อแปลกๆ)
   - `obdpin=xxxx` เพื่อกำหนด PIN
@@ -161,7 +169,8 @@ void mySensorsRead(GaugeInput &in) {
     // in.coolant = readNtcCelsius(27, 2200, 2500, 3950);
 }
 ```
-- ใส่เฉพาะค่าที่มี ค่าที่ไม่ใส่จะแสดง `--`
+- ใส่เฉพาะค่าที่มี ค่าที่ไม่ใส่จะแสดง `--`; ใน `GaugeInput` มี field `fuelLevel`, `fuelRate`, `stft`, `ltft`,
+  `map`, `ignition` และ `o2Mv` สำหรับค่าที่เพิ่มเข้ามา
 - ฟังก์ชันช่วยใน `src/gauge_input.h`: `readDividerVolts` (วัดไฟ), `readNtcCelsius` (วัดอุณหภูมิ), `PulseInput` (นับพัลส์ → รอบ/ความเร็ว)
 - ลองโดยไม่ต่อสาย: ตั้ง `EXAMPLE_FAKE_VALUES 1` ใน `my_sensors.cpp`
 - มีค่ามาจากที่อื่นในโค้ด (เช่น callback ของ CAN) เรียก `gauge::set(CH_RPM, ค่า)` ได้จากทุก task (thread-safe)

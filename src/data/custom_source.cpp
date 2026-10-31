@@ -16,10 +16,16 @@ void CustomSource::poll() {
 
     GaugeInput in;
     mySensorsRead(in);
-    const float vals[] = { in.rpm, in.speed, in.coolant, in.voltage, in.intake, in.gear, in.throttle };
-    const Channel chs[] = { CH_RPM, CH_SPEED, CH_COOLANT, CH_VOLTAGE, CH_IAT, CH_GEAR, CH_THROTTLE };
+    const float vals[] = {
+        in.rpm, in.speed, in.coolant, in.voltage, in.intake, in.gear, in.throttle,
+        in.fuelLevel, in.fuelRate, in.stft, in.ltft, in.map, in.ignition, in.o2Mv
+    };
+    const Channel chs[] = {
+        CH_RPM, CH_SPEED, CH_COOLANT, CH_VOLTAGE, CH_IAT, CH_GEAR, CH_THROTTLE,
+        CH_FUEL_LEVEL, CH_FUEL_RATE, CH_STFT, CH_LTFT, CH_MAP, CH_IGNITION, CH_O2_MV
+    };
     int n = 0;
-    for (int i = 0; i < 7; i++)
+    for (int i = 0; i < (int)(sizeof vals / sizeof vals[0]); i++)
         if (!isnan(vals[i])) { bus::publish(chs[i], vals[i]); n++; }
 
     if (!n) {   // values pushed with gauge::set() from elsewhere (CAN callback, own task) count too

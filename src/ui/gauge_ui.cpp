@@ -422,6 +422,13 @@ static bool itemValid(uint8_t item, const GaugeView &v) {
         case PI_INTAKE:   return v.iatValid;
         case PI_AFR:      return v.afrValid;
         case PI_THROTTLE: return v.tpsValid;
+        case PI_FUEL_LEVEL: return v.fuelLevelValid;
+        case PI_FUEL_RATE:  return v.fuelRateValid;
+        case PI_STFT:       return v.stftValid;
+        case PI_LTFT:       return v.ltftValid;
+        case PI_MAP:        return v.mapValid;
+        case PI_IGNITION:   return v.ignitionValid;
+        case PI_O2_MV:      return v.o2MvValid;
         default:          return false;
     }
 }
@@ -450,6 +457,34 @@ static void drawItem(int i, uint8_t item, const GaugeView &v) {
     case PI_THROTTLE:
         snprintf(buf, sizeof buf, "%d", v.tps);
         drawPanel(i, "THROTTLE", v.tpsValid, buf, "%", s_theme->accentBright, v.tps / 100.0f);
+        break;
+    case PI_FUEL_LEVEL:
+        snprintf(buf, sizeof buf, "%d", v.fuelLevel);
+        drawPanel(i, "FUEL", v.fuelLevelValid, buf, "%", s_theme->good, v.fuelLevel / 100.0f);
+        break;
+    case PI_FUEL_RATE:
+        snprintf(buf, sizeof buf, "%.1f", v.fuelRate);
+        drawPanel(i, "FUEL RATE", v.fuelRateValid, buf, "L/h", s_theme->accentBright, v.fuelRate / 100.0f);
+        break;
+    case PI_STFT:
+        snprintf(buf, sizeof buf, "%.1f", v.stft);
+        drawPanel(i, "STFT", v.stftValid, buf, "%", s_theme->accentBright, (v.stft + 25.0f) / 50.0f);
+        break;
+    case PI_LTFT:
+        snprintf(buf, sizeof buf, "%.1f", v.ltft);
+        drawPanel(i, "LTFT", v.ltftValid, buf, "%", s_theme->accentBright, (v.ltft + 25.0f) / 50.0f);
+        break;
+    case PI_MAP:
+        snprintf(buf, sizeof buf, "%d", v.map);
+        drawPanel(i, "MAP", v.mapValid, buf, "KPA", s_theme->accentBright, v.map / 255.0f);
+        break;
+    case PI_IGNITION:
+        snprintf(buf, sizeof buf, "%.1f", v.ignition);
+        drawPanel(i, "IGN ADV", v.ignitionValid, buf, "DEG", s_theme->accentBright, v.ignition / 64.0f);
+        break;
+    case PI_O2_MV:
+        snprintf(buf, sizeof buf, "%d", v.o2Mv);
+        drawPanel(i, "O2 SENSOR", v.o2MvValid, buf, "mV", s_theme->accentBright, v.o2Mv / 1000.0f);
         break;
     default:
         snprintf(buf, sizeof buf, "%d", v.coolant);
