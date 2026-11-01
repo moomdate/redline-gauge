@@ -19,8 +19,7 @@ inline int obdHexByte(const char *p) {
     return (a < 0 || b < 0) ? -1 : a * 16 + b;
 }
 
-// Mode 01 PIDs used by the gauge: 0C rpm, 0D speed, 05 coolant, 0F intake,
-// 5B hybrid battery remaining (SOC %). 9A (hybrid battery V/A) has its own parser.
+// Standard Mode 01 PIDs used by the gauge. 9A (hybrid battery V/A) has its own parser.
 // Several ECUs may answer; the first "41<pid>" wins.
 inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
     char tag[5];
@@ -37,8 +36,24 @@ inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
             return OBD_OK;
         }
         case 0x0D: out = (float)A; return OBD_OK;
+        case 0x06:
+        case 0x07: out = A * (100.0f / 128.0f) - 100.0f; return OBD_OK;
+        case 0x0B: out = (float)A; return OBD_OK;
+        case 0x0E: out = A * 0.5f - 64.0f; return OBD_OK;
         case 0x05:
         case 0x0F: out = A - 40.0f; return OBD_OK;
+        case 0x11: out = A * (100.0f / 255.0f); return OBD_OK;
+        case 0x14:
+            if (obdHexByte(p + 6) < 0) return OBD_BAD;
+            out = A * 5.0f;
+            return OBD_OK;
+        case 0x2F: out = A * (100.0f / 255.0f); return OBD_OK;
+        case 0x5E: {
+            int B = obdHexByte(p + 6);
+            if (B < 0) return OBD_BAD;
+            out = (A * 256 + B) * 0.05f;
+            return OBD_OK;
+        }
         case 0x5B: out = A * 100.0f / 255.0f; return OBD_OK;
         default:   return OBD_BAD;
     }

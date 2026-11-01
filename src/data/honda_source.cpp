@@ -224,6 +224,7 @@ void HondaKSource::pollO2() {
     if (transact(req, 5, 150) && hkDecodeO2(resp_, respLen_, raw)) {
         float volts = hkO2Volts(raw), afr = hkAfrFromO2(volts);
         bus::publish(CH_AFR, afr);
+        bus::publish(CH_O2_MV, volts * 1000.0f);
         o2Miss_ = 0;
         s_link.reply();
         s_o2Volts = volts;

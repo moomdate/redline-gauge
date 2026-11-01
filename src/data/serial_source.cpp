@@ -16,6 +16,12 @@ static const Key kKeys[] = {
     {"iat", CH_IAT}, {"intake", CH_IAT},
     {"gear", CH_GEAR},
     {"tps", CH_THROTTLE}, {"throttle", CH_THROTTLE},
+    {"fuel", CH_FUEL_LEVEL}, {"fuellevel", CH_FUEL_LEVEL}, {"fuel_level", CH_FUEL_LEVEL},
+    {"fuelrate", CH_FUEL_RATE}, {"fuel_rate", CH_FUEL_RATE},
+    {"stft", CH_STFT}, {"ltft", CH_LTFT},
+    {"map", CH_MAP},
+    {"ign", CH_IGNITION}, {"ignition", CH_IGNITION}, {"advance", CH_IGNITION},
+    {"o2", CH_O2_MV}, {"o2mv", CH_O2_MV}, {"o2_mv", CH_O2_MV},
     {"soc", CH_HV_SOC}, {"hvsoc", CH_HV_SOC},
     {"kw", CH_HV_KW}, {"hvkw", CH_HV_KW},
 };

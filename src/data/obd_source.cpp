@@ -171,7 +171,10 @@ bool ObdSource::scan(char *macOut) {
 }
 
 // PIDs we read. Index order matters for noData_[] and the schedule below.
-enum { P_RPM, P_SPEED, P_COOLANT, P_IAT, P_VOLT, P_HV_SOC, P_HV, P_COUNT };
+enum {
+    P_RPM, P_SPEED, P_COOLANT, P_IAT, P_VOLT, P_HV_SOC, P_HV,
+    P_TPS, P_FUEL_LEVEL, P_FUEL_RATE, P_STFT, P_LTFT, P_MAP, P_IGNITION, P_O2, P_COUNT
+};
 struct PidDef { const char *cmd; uint8_t pid; Channel ch; };
 static const PidDef kPids[] = {
     {"010C", 0x0C, CH_RPM},
@@ -181,13 +184,22 @@ static const PidDef kPids[] = {
     {"ATRV", 0x00, CH_VOLTAGE},     // adapter's own supply-pin reading = battery voltage
     {"015B", 0x5B, CH_HV_SOC},      // hybrids only (e.g. Honda e:HEV); others: skipped via 0140
     {"019A", 0x9A, CH_HV_KW},       // hybrid battery volts x amps -> kW
+    {"0111", 0x11, CH_THROTTLE},
+    {"012F", 0x2F, CH_FUEL_LEVEL},
+    {"015E", 0x5E, CH_FUEL_RATE},
+    {"0106", 0x06, CH_STFT},
+    {"0107", 0x07, CH_LTFT},
+    {"010B", 0x0B, CH_MAP},
+    {"010E", 0x0E, CH_IGNITION},
+    {"0114", 0x14, CH_O2_MV},
 };
 static_assert(sizeof kPids / sizeof kPids[0] == P_COUNT, "kPids / enum mismatch");
-// RPM every other request, speed often, slow-moving temps/voltage rarely.
-// Hybrid PIDs are skipped automatically on cars that don't list them.
+// RPM alternates with the other PID requests; unsupported PIDs are skipped from this rotation.
 static const uint8_t kSchedule[] = {
-    P_RPM, P_SPEED, P_RPM, P_COOLANT, P_RPM, P_HV, P_RPM, P_SPEED, P_RPM, P_IAT,
-    P_RPM, P_HV, P_RPM, P_SPEED, P_RPM, P_VOLT, P_RPM, P_HV_SOC,
+    P_RPM, P_SPEED, P_RPM, P_COOLANT, P_RPM, P_IAT, P_RPM, P_VOLT,
+    P_RPM, P_TPS, P_RPM, P_FUEL_LEVEL, P_RPM, P_FUEL_RATE, P_RPM, P_STFT,
+    P_RPM, P_LTFT, P_RPM, P_MAP, P_RPM, P_IGNITION, P_RPM, P_O2,
+    P_RPM, P_HV, P_RPM, P_HV_SOC,
 };
 
 void ObdSource::retryIn(uint32_t ms, State then, const char *msg) {

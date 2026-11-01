@@ -78,8 +78,9 @@ If the splash is removed or the logo is changed, the status bar shows `UNOFFICIA
 - **BEEP ON/OFF**, **RESET PEAK**, **DONE** to go back
 - **PANEL AUTO / STD / HYB**: right-hand panels. STD = COOLANT · VOLTAGE · INTAKE; HYB = COOLANT · HV BATT (%) · HV POWER (kW, negative = regen);
   AUTO switches to HYB as soon as the source delivers hybrid battery data (e.g. OBD on a Honda e:HEV)
-- **Tap a right-hand panel** on the gauge to change what it shows: COOLANT, VOLTAGE, INTAKE, AFR (HONDA K) or
-  THROTTLE. It steps to the next value that has data and isn't on another panel; the choice is saved.
+- **Tap a right-hand panel** on the gauge to change what it shows: COOLANT, VOLTAGE, INTAKE, AFR (HONDA K),
+  THROTTLE, FUEL LEVEL, FUEL RATE, STFT, LTFT, MAP, IGN ADV, or O2 SENSOR (mV). It skips values without fresh data
+  and values already shown in another panel; the choice is saved. RPM, session PEAK RPM, and SPEED remain on the main display.
 - **Link pill** (HONDA K and OBD BT): the status bar shows `● ECU OK`, the connecting step (`BT PAIRING`,
   `ELM INIT` …) or a red `✕` with the reason and the seconds to the next try; **NOT CONNECTED** shows above the
   RPM while it is down. Tap the pill for the link page: what to check, next retry, uptime, replies per second,
@@ -129,9 +130,14 @@ SIM AUTO loops a scripted drive: idle → city → full-throttle pull through th
    - `obd=scan` to forget the saved adapter.
    An empty scan list usually means the adapter is BLE-only (see below) or a phone is still connected to it.
 
-Reads: RPM (010C), speed (010D), coolant (0105), intake (010F), battery voltage (ATRV), and on hybrids
-HV battery SOC (015B) and HV battery power from voltage × current (019A). Only PIDs the car lists in its
-supported-PID bitmasks (0100 … 0180) are polled.
+Reads: RPM (010C), speed (010D), coolant (0105), intake (010F), battery voltage (ATRV), throttle (0111),
+fuel level (012F), fuel rate (015E), STFT (0106), LTFT (0107), MAP (010B), ignition advance (010E), and
+O2 sensor 1 voltage (0114, shown in mV), plus hybrid battery SOC (015B) and power (019A) where available.
+Only PIDs the ECU lists in its supported-PID bitmasks (0100 … 0180) are polled; unsupported or stale values show `--`.
+
+**Honda Forza 350 (2021):** Forza-specific diagnostic protocol and OBD PID compatibility have not been verified.
+This generic OBD-II support is not a claim that the bike exposes these PIDs. Do not connect an adapter to the bike
+until its connector, electrical interface, and protocol are verified using reliable Honda/service documentation.
 
 **Hybrids (e.g. Honda Civic e:HEV)**: set GEAR to OFF (there is no stepped gearbox). PANEL AUTO turns on
 HV BATT / HV POWER once the car answers 015B / 019A. In EV mode the engine is off, so RPM reads 0. If HV POWER
@@ -146,8 +152,11 @@ Gear is estimated from rpm/speed → set `GEAR_RATIOS`, `FINAL_DRIVE`, `TIRE_CIR
 One line per update, any subset of values:
 ```
 rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3
-{"rpm":3200,"speed":86,"coolant":87,"voltage":13.9,"iat":42}
+fuel=65 fuelrate=2.4 stft=-1.5 ltft=2 map=34 ign=12.5 o2mv=450
+{"rpm":3200,"speed":86,"coolant":87,"voltage":13.9,"iat":42,"fuel":65}
 ```
+Additional keys: `fuel`/`fuellevel` (%), `fuelrate` (L/h), `stft`/`ltft` (%), `map` (kPa),
+`ign`/`ignition` (deg), and `o2`/`o2mv` (mV).
 Test from a Mac: `~/.platformio/penv/bin/python tools/serial_feed.py /dev/cu.usbserial-XXXX`
 (it sends `mode=serial` and a sweep of values automatically).
 
@@ -178,7 +187,8 @@ void mySensorsRead(GaugeInput &in) {
     // in.coolant = readNtcCelsius(27, 2200, 2500, 3950);
 }
 ```
-- Set only the fields you have. Anything left as `NAN` shows `--`.
+- Set only the fields you have. Anything left as `NAN` shows `--`. `GaugeInput` includes `fuelLevel`,
+  `fuelRate`, `stft`, `ltft`, `map`, `ignition`, and `o2Mv` for the additional telemetry.
 - Ready-made helpers in `src/gauge_input.h`: `readDividerVolts`, `readNtcCelsius`, `PulseInput` (RPM/VSS from pulses).
 - Try it without wiring: set `EXAMPLE_FAKE_VALUES 1` in `my_sensors.cpp`.
 - Values coming from elsewhere (a CAN callback, a BLE notify): call `gauge::set(CH_RPM, v)` from any task. It is thread-safe.

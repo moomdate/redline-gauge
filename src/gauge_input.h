@@ -25,6 +25,13 @@ struct GaugeInput {
     float intake   = NAN;   // °C
     float gear     = NAN;   // 0 = N, 1..n. Leave NAN to let the gauge estimate it
     float throttle = NAN;   // %
+    float fuelLevel = NAN;  // %
+    float fuelRate  = NAN;  // L/h
+    float stft      = NAN;  // %
+    float ltft      = NAN;  // %
+    float map       = NAN;  // kPa
+    float ignition  = NAN;  // deg
+    float o2Mv      = NAN;  // mV
 };
 
 void mySensorsBegin();                 // once, when CUSTOM becomes active

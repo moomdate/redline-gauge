@@ -27,6 +27,13 @@ struct GaugeView {
     bool  iatValid;   int   iat;     Level iatLvl;
     bool  afrValid;   float afr;     Level afrLvl;   // LV_WARN = rich, LV_COLD = lean
     bool  tpsValid;   int   tps;     // throttle %
+    bool  fuelLevelValid; int fuelLevel;
+    bool  fuelRateValid;  float fuelRate;
+    bool  stftValid;      float stft;
+    bool  ltftValid;      float ltft;
+    bool  mapValid;       int map;
+    bool  ignitionValid;  float ignition;
+    bool  o2MvValid;      int o2Mv;
     bool  hybrid;        // show the hybrid panel set (settings, or AUTO + data seen)
     bool  socValid;   int   soc;     Level socLvl;
     bool  kwValid;    float kw;

@@ -157,8 +157,9 @@ static void printHelp() {
         "  touchcal (or BOOT button)   touchcal=reset   touchcal=xmin,xmax,ymin,ymax,axis\n"
         "  timer   timerlog   timerlog=clear   kdump (HONDA K raw tables)   klineinvert=on|off\n"
         "  obd=scan | obd=AA:BB:CC:DD:EE:FF   obdpin=1234|0000 (empty = auto)\n"
-        "data (SERIAL mode):  rpm=3200 spd=86 clt=87 volt=13.9 iat=42 gear=3\n"
-        "           or JSON:  {\"rpm\":3200,\"speed\":86,\"coolant\":87,\"voltage\":13.9}\n"));
+        "data (SERIAL mode):  rpm=3200 spd=86 clt=87 volt=13.9 iat=42 tps=30 fuel=65\n"
+        "           or JSON:  {\"rpm\":3200,\"speed\":86,\"coolant\":87,\"voltage\":13.9}\n"
+        "extra: fuelrate=2.4 stft=-1.5 ltft=2 map=34 ign=12.5 o2mv=450\n"));
 }
 
 static bool keyIs(const char *p, const char *key, const char **val) {

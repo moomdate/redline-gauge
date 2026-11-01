@@ -96,9 +96,10 @@ static void test_fonts_cover_every_ui_string() {
     TEST_ASSERT_TRUE(fontHas(font_rpm, "0123456789,-"));
     TEST_ASSERT_TRUE(fontHas(font_speed, "0123456789-N"));
     TEST_ASSERT_TRUE(fontHas(font_value, "0123456789.-"));
-    TEST_ASSERT_TRUE(fontHas(font_label, "SPEED " PANEL1_LABEL PANEL2_LABEL PANEL3_LABEL));
+    TEST_ASSERT_TRUE(fontHas(font_label, "SPEED " PANEL1_LABEL PANEL2_LABEL PANEL3_LABEL
+                                         "FUEL RATE STFT LTFT MAP IGN ADV O2 SENSOR"));
     TEST_ASSERT_TRUE(fontHas(font_small, "ENGINE SPEED PEAK RPM km/h GEAR °C V SETUP " STATUS_TITLE
-                                         "BEEP ON OFF RESET THEME DATA SOURCE SHIFT LIGHT BRIGHTNESS % kW"));
+                                         "BEEP ON OFF RESET THEME DATA SOURCE SHIFT LIGHT BRIGHTNESS % kW L/h KPA DEG mV"));
     for (int i = 0; i < PANELS_COUNT; i++) TEST_ASSERT_TRUE(fontHas(font_small, settings_ui::kPanelLabels[i]));
     TEST_ASSERT_TRUE(fontHas(font_small, "GEAR AUTO GEAR OFF"));
     TEST_ASSERT_TRUE(fontHas(font_label, HYBRID_PANEL2_LABEL HYBRID_PANEL3_LABEL));
@@ -151,6 +152,21 @@ static void test_serial_json_and_aliases() {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 120.5f, s.value[CH_SPEED]);
 }
 
+static void test_serial_extra_telemetry() {
+    bus::clear();
+    TEST_ASSERT_EQUAL_INT(7, SerialSource::feed(
+        "fuel=65 fuelrate=2.4 stft=-1.5 ltft=2 map=34 ign=12.5 o2mv=450", true));
+    GaugeSnapshot s;
+    bus::snapshot(s);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 65, s.value[CH_FUEL_LEVEL]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.4f, s.value[CH_FUEL_RATE]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.5f, s.value[CH_STFT]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2, s.value[CH_LTFT]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 34, s.value[CH_MAP]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.5f, s.value[CH_IGNITION]);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 450, s.value[CH_O2_MV]);
+}
+
 static void test_serial_ignores_garbage() {
     bus::clear();
     TEST_ASSERT_EQUAL_INT(0, SerialSource::feed("hello world", true));
@@ -175,6 +191,23 @@ static void test_obd_parse() {
     TEST_ASSERT_EQUAL_FLOAT(83, v);                                     // 0x7B - 40
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("410F28", 0x0F, v));
     TEST_ASSERT_EQUAL_FLOAT(0, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("410680", 0x06, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4107A0", 0x07, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 25, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("410B64", 0x0B, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 100, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("410E80", 0x0E, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("411180", 0x11, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("412F80", 0x2F, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4114808000", 0x14, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 640, v);
+    TEST_ASSERT_EQUAL(OBD_BAD, obdParsePid("411480", 0x14, v));
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("415E0100", 0x5E, v));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.8f, v);
     TEST_ASSERT_EQUAL(OBD_NODATA, obdParsePid("NODATA", 0x0C, v));
     TEST_ASSERT_EQUAL(OBD_BAD, obdParsePid("?", 0x0C, v));
     TEST_ASSERT_EQUAL(OBD_BAD, obdParsePid("410C1A", 0x0C, v));        // truncated
@@ -198,6 +231,45 @@ static void settle(GaugeModel &m, GaugeView &v, float rpm, float spd, float clt,
         bus::snapshot(s);
         m.update(s, g_host_ms, "TEST", v);
     }
+}
+
+static void test_model_extra_telemetry_and_staleness() {
+    GaugeModel m;
+    GaugeSnapshot s = {};
+    GaugeView v;
+    g_host_ms = 20000;
+    m.reset(g_host_ms);
+    s.value[CH_FUEL_LEVEL] = 65; s.stamp[CH_FUEL_LEVEL] = g_host_ms;
+    s.value[CH_FUEL_RATE] = 2.4f; s.stamp[CH_FUEL_RATE] = g_host_ms;
+    s.value[CH_STFT] = -1.5f; s.stamp[CH_STFT] = g_host_ms;
+    s.value[CH_LTFT] = 2; s.stamp[CH_LTFT] = g_host_ms;
+    s.value[CH_MAP] = 34; s.stamp[CH_MAP] = g_host_ms;
+    s.value[CH_IGNITION] = 12.5f; s.stamp[CH_IGNITION] = g_host_ms;
+    s.value[CH_O2_MV] = 450; s.stamp[CH_O2_MV] = g_host_ms;
+    m.update(s, g_host_ms, "TEST", v);
+    TEST_ASSERT_TRUE(v.fuelLevelValid);
+    TEST_ASSERT_EQUAL_INT(65, v.fuelLevel);
+    TEST_ASSERT_TRUE(v.fuelRateValid);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2.4f, v.fuelRate);
+    TEST_ASSERT_TRUE(v.stftValid);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, -1.5f, v.stft);
+    TEST_ASSERT_TRUE(v.ltftValid);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 2, v.ltft);
+    TEST_ASSERT_TRUE(v.mapValid);
+    TEST_ASSERT_EQUAL_INT(34, v.map);
+    TEST_ASSERT_TRUE(v.ignitionValid);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 12.5f, v.ignition);
+    TEST_ASSERT_TRUE(v.o2MvValid);
+    TEST_ASSERT_EQUAL_INT(450, v.o2Mv);
+
+    m.update(s, g_host_ms + DATA_STALE_MS, "TEST", v);
+    TEST_ASSERT_FALSE(v.fuelLevelValid);
+    TEST_ASSERT_FALSE(v.fuelRateValid);
+    TEST_ASSERT_FALSE(v.stftValid);
+    TEST_ASSERT_FALSE(v.ltftValid);
+    TEST_ASSERT_FALSE(v.mapValid);
+    TEST_ASSERT_FALSE(v.ignitionValid);
+    TEST_ASSERT_FALSE(v.o2MvValid);
 }
 
 static void test_obd_adapter_selection() {
@@ -712,6 +784,24 @@ static void test_afr_panel() {
     TEST_ASSERT_EQUAL_UINT8(PI_AFR, gauge_ui::nextPanelItem(2, v));   // wraps, past COOLANT/VOLTAGE (shown)
 }
 
+static void test_extra_panel_items_are_selectable() {
+    GaugeView v = {};
+    v.afrValid = v.tpsValid = true;
+    v.fuelLevelValid = v.fuelRateValid = v.stftValid = v.ltftValid = true;
+    v.mapValid = v.ignitionValid = v.o2MvValid = true;
+    uint8_t items[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+    gauge_ui::setPanelItems(items);
+    const uint8_t expected[] = {
+        PI_AFR, PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV
+    };
+    for (uint8_t item : expected) {
+        uint8_t next = gauge_ui::nextPanelItem(2, v);
+        TEST_ASSERT_EQUAL_UINT8(item, next);
+        items[2] = next;
+        gauge_ui::setPanelItems(items);
+    }
+}
+
 static void test_honda_kline_frames() {
     // fixed frames from the protocol references must checksum to zero
     TEST_ASSERT_EQUAL_HEX8(0x8C, hkChecksum(HK_PING, 3));
@@ -1050,6 +1140,7 @@ int main(int, char **) {
     RUN_TEST(test_theme_backgrounds_match_slot_geometry);
     RUN_TEST(test_serial_key_value);
     RUN_TEST(test_serial_json_and_aliases);
+    RUN_TEST(test_serial_extra_telemetry);
     RUN_TEST(test_serial_ignores_garbage);
     RUN_TEST(test_obd_parse);
     RUN_TEST(test_obd_adapter_selection);
@@ -1058,6 +1149,7 @@ int main(int, char **) {
     RUN_TEST(test_honda_kline_frames);
     RUN_TEST(test_honda_o2_afr);
     RUN_TEST(test_afr_panel);
+    RUN_TEST(test_extra_panel_items_are_selectable);
     RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);
     RUN_TEST(test_drag_timer_lift_and_arming);
@@ -1069,6 +1161,7 @@ int main(int, char **) {
     RUN_TEST(test_sim_drag_launch_from_line);
     RUN_TEST(test_timer_ui_partial_pushes);
     RUN_TEST(test_model_hybrid_panels_and_gear_off);
+    RUN_TEST(test_model_extra_telemetry_and_staleness);
     RUN_TEST(test_gear_estimate);
     RUN_TEST(test_model_levels_and_shift);
     RUN_TEST(test_model_marks_stale_values);
