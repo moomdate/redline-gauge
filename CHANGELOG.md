@@ -4,7 +4,7 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
-## [Unreleased]
+## [1.8.1] - 2026-11-01
 
 ### Added
 - **K-UART selector** (SETUP, or `klineuart=2|0`): run HONDA K on UART2 (GPIO22/27) or UART0
