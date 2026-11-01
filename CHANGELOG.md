@@ -4,6 +4,11 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.7.1] - 2026-11-01
+
+### Changed
+- Internal build-integrity hardening.
+
 ## [1.7.0] - 2026-10-24
 
 ### Added
