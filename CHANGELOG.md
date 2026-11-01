@@ -4,6 +4,14 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.8.0] - 2026-11-01
+
+### Added
+- **More OBD-II live values** (contributed via PR #1): fuel level, fuel rate, STFT/LTFT fuel trims,
+  MAP, ignition advance and O2 sensor voltage, over OBD BT, the serial feed and custom sensors.
+  Pick any of them with a tap on a right-hand panel. Only PIDs the vehicle reports are polled;
+  the rest show `--`. Useful on bikes that expose standard OBD-II (e.g. Honda X-ADV 750).
+
 ## [1.7.1] - 2026-11-01
 
 ### Changed
