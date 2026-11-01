@@ -3,6 +3,7 @@
 #include "config.h"
 #include "assets/logo_birdlab.h"
 #include "fonts/font_title.h"
+#include "core/provenance.h"
 #include "fonts/font_small.h"
 #include <string.h>
 
@@ -28,7 +29,7 @@ uint32_t creditCrc() {
     return crc32(c, (const uint8_t *)kWordmark, strlen(kWordmark));
 }
 
-bool authentic() { return s_completed && creditCrc() == kCreditCrc; }
+bool authentic() { return s_completed && creditCrc() == kCreditCrc && provenance::intact(); }
 
 #define C_RED    0xff2424
 #define C_WHITE  0xffffff

@@ -91,3 +91,44 @@ def extract_from_image(seed: bytes, image: bytes):
             if rec[:4] == MAGIC:
                 found.append((i, rec, sig))
     return found
+
+
+# ---- core fingerprint: prove your own data blobs are inside a suspect image ----
+# Large, distinctive constant arrays (background art, fonts, logo) end up verbatim in flash.
+# An infringer who only reskins the UI keeps them; removing them means replacing your whole
+# asset set. So a byte-identical window of each is a mark that lives in the suspect's own copy
+# of your work - nothing to strip. The manifest of these windows is signed so it can't be faked.
+import json
+import os
+import re
+
+
+def parse_c_array(path):
+    """Return (name, width_bytes, raw_bytes) for the first `static const uintNN_t NAME[..] = {..}`."""
+    src = open(path).read()
+    m = re.search(r"static\s+const\s+uint(8|16|32)_t\s+([A-Za-z0-9_]+)\s*\[[^\]]*\]\s*=\s*\{(.*?)\}", src, re.S)
+    if not m:
+        raise ValueError(f"no const array in {path}")
+    width = int(m.group(1)) // 8
+    name = m.group(2)
+    nums = re.findall(r"0[xX][0-9a-fA-F]+|\d+", m.group(3))
+    out = bytearray()
+    for n in nums:
+        v = int(n, 0)
+        out += v.to_bytes(width, "little")
+    return name, width, bytes(out)
+
+
+def fingerprint_entry(path, window=160):
+    name, width, raw = parse_c_array(path)
+    # a deterministic window from ~1/3 in (skips leading run-length-ish zeros common at the top)
+    off = (len(raw) // 3) & ~1
+    win = raw[off:off + window]
+    return {"file": os.path.relpath(path), "symbol": name, "bytes": len(raw),
+            "sha256": hashlib.sha256(raw).hexdigest(), "window_off": off,
+            "window_hex": win.hex()}
+
+
+def manifest_message(entries):
+    """Canonical bytes to sign / verify for a fingerprint manifest."""
+    return json.dumps(entries, sort_keys=True, separators=(",", ":")).encode()

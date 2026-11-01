@@ -24,6 +24,15 @@ python3 tools/sign/make_record.py --serial <n>
 Give each person / batch a different `--serial`; a leaked, resold image then tells you which line
 it came from. Commit the regenerated `src/core/prov_data.h`.
 
+## Two layers of proof
+- **Core fingerprint** (`tools/sign/fingerprint.py` -> `core_manifest.json`, signed + committed):
+  byte-identical windows of your own art / logo / fonts. A reskinned clone still ships them, and
+  `verify.py` finds them in the suspect image. Nothing to strip - it is their copy of your work.
+- **Embedded mark** (disguised as `src/core/shade_lut.h`, a "shading LUT"): a signed record that
+  also carries the build serial, so a leaked copy can be traced to who received it. Removing it
+  makes the dash show **UNOFFICIAL** (bound into `splash_ui::authentic()`), and the fingerprint
+  still catches the clone.
+
 ## Proving infringement
 ```
 esptool.py --port <PORT> read_flash 0x0 0x400000 suspect.bin   # dump the suspect device

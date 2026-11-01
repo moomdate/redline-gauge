@@ -25,7 +25,6 @@
 #include "data/custom_source.h"
 #include "data/honda_source.h"
 #include "ui/link_ui.h"
-#include "core/provenance.h"
 #include "ui/gauge_model.h"
 #include "ui/gauge_ui.h"
 #include "ui/settings_ui.h"
@@ -791,7 +790,6 @@ void setup() {
     requestedSrc = settings.source;
 
     xTaskCreatePinnedToCore(dataTask, "data", 8192, nullptr, 2, nullptr, 0);
-    provenance::logBoot();
     printHelp();
     Serial.printf("[gauge] theme %s, source %s, shift %u, free heap %u\n", kThemes[settings.theme].name,
                   sources[settings.source]->name(), settings.shiftRpm, (unsigned)ESP.getFreeHeap());
