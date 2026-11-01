@@ -26,6 +26,11 @@ public:
     // invert both UART directions and the wake pulse. Saved in NVS; `klineinvert=on|off`.
     static void setInvert(bool on);
     static bool invert();
+    // HONDA K UART pins: 2 = UART2 (GPIO22/27, CN1), 0 = UART0 (GPIO3/1, USB header).
+    // Changing it takes effect at the next begin(); UART0 frees the USB console while active.
+    static void setUart(uint8_t u);
+    static uint8_t uart();
+    static bool ownsConsole();           // true while HONDA K holds UART0 (USB console is off)
 
 private:
     enum State : uint8_t { S_WAKE, S_RUN, S_WAIT };

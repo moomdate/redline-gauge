@@ -4,6 +4,13 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [Unreleased]
+
+### Added
+- **K-UART selector** (SETUP, or `klineuart=2|0`): run HONDA K on UART2 (GPIO22/27) or UART0
+  (GPIO3/1, the USB header) without re-flashing or moving wires. On UART0 the USB log is off while
+  connected (so nothing leaks onto the K wire) and restored on leaving HONDA K. One firmware, no extra images.
+
 ## [1.8.0] - 2026-11-01
 
 ### Added

@@ -245,6 +245,10 @@ through its red 4-pin diagnostic connector. Other models may lay out the data di
   - Car side: orange = K-line, green = GND, white/black = +12 V switched. Leave brown (SCS) unconnected.
   - CYD side (CN1): board RX-out → **GPIO 22**, **GPIO 27** → board TX-in, VCC → **3.3 V** (never 5 V), GND.
     Pins: `KLINE_RX_PIN` / `KLINE_TX_PIN` in `config.h`.
+  - **K-UART** (SETUP, or `klineuart=2|0`): choose the pins without re-flashing or moving wires.
+    `2` = UART2 (GPIO22/27, CN1, default). `0` = UART0 (GPIO3/1, the USB header) — handy when the
+    transceiver sits near the USB/VIN header. While HONDA K runs on UART0 the **USB log/commands are
+    off** (that keeps log bytes off the K wire); they come back when you leave HONDA K. Saved in NVS.
 - **What it does**: wakes the ECU (K low 70 ms, high 130 ms), sends `FE 04 72 8C` and `72 05 00 F0 99`,
   then polls table 0x17 (`72 05 71 17 01`) and the O2 sensor in table 0x20 four times a second.
 - **Values**: RPM, throttle %, engine temp, battery, intake air (Wave 110i / 125i; not on a Wave 100i) and

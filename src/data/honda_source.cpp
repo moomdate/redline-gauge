@@ -26,7 +26,18 @@ void HondaKSource::setInvert(bool on) {
     if (p.begin("kline", false)) { p.putBool("inv", on); p.end(); }
 }
 
-static HardwareSerial &K = Serial2;
+static HardwareSerial &K = Serial2;        // HONDA K always uses the UART2 peripheral; only the pins change
+static volatile uint8_t s_uart = 2;        // 2 = GPIO22/27, 0 = GPIO3/1 (USB header)
+static int s_rxPin = KLINE_RX_PIN, s_txPin = KLINE_TX_PIN;
+
+uint8_t HondaKSource::uart() { return s_uart; }
+bool HondaKSource::ownsConsole() { return ownsUart && s_uart == 0; }
+
+void HondaKSource::setUart(uint8_t u) {
+    s_uart = (u == 0) ? 0 : 2;
+    s_rxPin = s_uart == 0 ? KLINE_UART0_RX_PIN : KLINE_RX_PIN;
+    s_txPin = s_uart == 0 ? KLINE_UART0_TX_PIN : KLINE_TX_PIN;
+}
 
 void HondaKSource::retryIn(uint32_t ms, State then, const char *msg) {
     bus::setLink(Link::Error, msg);
@@ -43,6 +54,7 @@ void HondaKSource::retryIn(uint32_t ms, State then, const char *msg) {
 
 void HondaKSource::begin() {
     ownsUart = true;                   // main.cpp stops reading Serial2 as the text input
+    if (s_uart == 0) Serial.end();     // free the USB console (UART0) so K-line can use GPIO3/1
     Preferences p;
     if (p.begin("kline", false)) { s_invert = p.getBool("inv", KLINE_INVERT); p.end(); }
     delay(20);                         // let a poll in progress on the other core finish
@@ -56,6 +68,7 @@ void HondaKSource::begin() {
 
 void HondaKSource::end() {
     K.end();
+    if (s_uart == 0) Serial.begin(SERIAL_BAUD);   // give the USB console back
 #if EXT_SERIAL_RX_PIN >= 0
     // hand GPIO 27 back to the text serial input (receive-only), idle-high
     pinMode(KLINE_TX_PIN, INPUT);
@@ -79,12 +92,12 @@ static bool readByte(uint8_t &b, uint32_t until) {
 // A line that never goes high is a wiring / power problem, not a silent ECU.
 HondaKSource::Idle HondaKSource::waitIdle() {
     const int idleLevel = s_invert ? LOW : HIGH;
-    pinMode(KLINE_RX_PIN, INPUT_PULLUP);
+    pinMode(s_rxPin, INPUT_PULLUP);
     for (int attempt = 0; attempt < 5; attempt++) {
         bool sawHigh = false, sawLow = false;
         uint32_t start = millis();
         while (millis() - start < 300) {
-            if (digitalRead(KLINE_RX_PIN) == idleLevel) sawHigh = true;
+            if (digitalRead(s_rxPin) == idleLevel) sawHigh = true;
             else sawLow = true;
             delayMicroseconds(200);
         }
@@ -105,14 +118,14 @@ bool HondaKSource::wake() {
     idle_ = waitIdle();
     // "K low" is TX low on a normal transceiver, TX high through an inverting opto stage
     uint8_t kLow = s_invert ? HIGH : LOW, kHigh = s_invert ? LOW : HIGH;
-    pinMode(KLINE_TX_PIN, OUTPUT);
-    digitalWrite(KLINE_TX_PIN, kLow);
+    pinMode(s_txPin, OUTPUT);
+    digitalWrite(s_txPin, kLow);
     delay(70);
-    digitalWrite(KLINE_TX_PIN, kHigh);
+    digitalWrite(s_txPin, kHigh);
     // start the UART inside the 130 ms high phase, so a pin glitch from K.begin can't land
     // right before the ping
-    K.begin(10400, SERIAL_8N1, KLINE_RX_PIN, KLINE_TX_PIN, s_invert);
-    gpio_pullup_en((gpio_num_t)KLINE_RX_PIN);   // opto boards leave RX open-collector, no pull-up
+    K.begin(10400, SERIAL_8N1, s_rxPin, s_txPin, s_invert);
+    gpio_pullup_en((gpio_num_t)s_rxPin);        // opto boards leave RX open-collector, no pull-up
     delay(130);
     while (K.available()) K.read();
     bool ping = transact(HK_PING, sizeof HK_PING, 300) && resp_[0] == 0x0E;

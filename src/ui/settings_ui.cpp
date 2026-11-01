@@ -30,10 +30,11 @@ static const Rect R_SHIFT_UP = { 116, 194, 26, 22 };
 static const Rect R_BRI_DN   = { 168, 194, 26, 22 };
 static const Rect R_BRI_V    = { 196, 194, 78, 22 };
 static const Rect R_BRI_UP   = { 276, 194, 26, 22 };
-static const Rect R_BEEP     = {   8, 221, 70, 17 };
-static const Rect R_PEAK     = {  82, 221, 70, 17 };
-static const Rect R_PANELS   = { 156, 221, 70, 17 };
-static const Rect R_GEAR     = { 230, 221, 72, 17 };
+static const Rect R_BEEP     = {   8, 221, 58, 17 };
+static const Rect R_PEAK     = {  69, 221, 58, 17 };
+static const Rect R_PANELS   = { 130, 221, 58, 17 };
+static const Rect R_GEAR     = { 191, 221, 58, 17 };
+static const Rect R_KUART    = { 252, 221, 60, 17 };
 const char *const kPanelLabels[PANELS_COUNT] = { "PANEL AUTO", "PANEL STD", "PANEL HYB" };
 
 #define C_TEXT   0xd9e2e7
@@ -130,6 +131,7 @@ static void compose(Canvas &cv, const Settings &s) {
     button(cv, t, R_PEAK, s_peakCleared ? "CLEARED" : "RESET PEAK", s_peakCleared, font_small);
     button(cv, t, R_PANELS, kPanelLabels[s.panels < PANELS_COUNT ? s.panels : 0], s.panels != PANELS_AUTO, font_small);
     button(cv, t, R_GEAR, s.gearMode == GEARMODE_OFF ? "GEAR OFF" : "GEAR AUTO", s.gearMode == GEARMODE_OFF, font_small);
+    button(cv, t, R_KUART, s.klineUart == 0 ? "K-UART 0" : "K-UART 2", s.klineUart == 0, font_small);
 }
 
 void draw(const Settings &s) {
@@ -174,6 +176,7 @@ Action tap(int x, int y, Settings &s) {
     if (inside(R_BEEP, x, y)) { s.beep = !s.beep; a = ACT_CHANGED; }
     if (inside(R_PANELS, x, y)) { s.panels = (s.panels + 1) % PANELS_COUNT; a = ACT_CHANGED; }
     if (inside(R_GEAR, x, y)) { s.gearMode = (s.gearMode + 1) % GEARMODE_COUNT; a = ACT_CHANGED; }
+    if (inside(R_KUART, x, y)) { s.klineUart = s.klineUart == 0 ? 2 : 0; a = ACT_CHANGED; }
     if (a == ACT_CHANGED || wasCleared) draw(s);
     return a;
 }

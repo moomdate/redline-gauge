@@ -1092,17 +1092,22 @@ static void test_settings_taps() {
     TEST_ASSERT_EQUAL_UINT8(SRC_HONDA, s.source);
     TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(300, 163, s));     // no 7th source (H TEST gone)
     TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(280, 14, s));     // DONE
-    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(117, 229, s));
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(191, 229, s));  // PANELS cycles
+    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(98, 229, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(159, 229, s));  // PANELS cycles
     TEST_ASSERT_EQUAL_UINT8(PANELS_STANDARD, s.panels);
-    settings_ui::tap(191, 229, s);
+    settings_ui::tap(159, 229, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_HYBRID, s.panels);
-    settings_ui::tap(191, 229, s);
+    settings_ui::tap(159, 229, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_AUTO, s.panels);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(266, 229, s));  // GEAR
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(220, 229, s));  // GEAR
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_OFF, s.gearMode);
-    settings_ui::tap(266, 229, s);
+    settings_ui::tap(220, 229, s);
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_AUTO, s.gearMode);
+    TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(282, 229, s));  // K-UART toggles
+    TEST_ASSERT_EQUAL_UINT8(0, s.klineUart);
+    settings_ui::tap(282, 229, s);
+    TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
     TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(160, 144, s));     // between theme names and sources
 }
 

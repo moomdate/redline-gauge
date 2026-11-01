@@ -81,6 +81,11 @@
 #define KLINE_RX_PIN        22
 #define KLINE_TX_PIN        27
 #define KLINE_INVERT         0      // 1 = inverting opto interface (DIY 2-opto schematic); also `klineinvert=on`
+// HONDA K can run on UART2 pins (CN1, below) or UART0 pins (the USB/prog header). Pick at runtime
+// in SETUP (K-UART) or `klineuart=0|2`. UART0 shares the USB console: while HONDA K uses UART0 the
+// USB log/commands are off (so nothing leaks onto the K wire), restored when you leave HONDA K.
+#define KLINE_UART0_RX_PIN   3
+#define KLINE_UART0_TX_PIN   1
 
 // ---- Hardware (CYD) -----------------------------------------------------------
 #define PIN_SPEAKER          26

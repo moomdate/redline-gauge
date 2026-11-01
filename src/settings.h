@@ -27,6 +27,7 @@ struct Settings {
     uint8_t  panels     = PANELS_AUTO;
     uint8_t  gearMode   = GEARMODE_AUTO;
     uint8_t  panelItem[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+    uint8_t  klineUart  = 2;             // HONDA K pins: 2 = UART2 (22/27), 0 = UART0 (3/1)
     // Panel colour inversion. The build picks the default (esp32dev = inverted panel), but
     // CYD batches differ, so SETUP -> COLORS flips it at runtime and it is saved.
 #ifdef TFT_INVERSION_ON
