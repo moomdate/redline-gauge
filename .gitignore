@@ -3,3 +3,8 @@
 tools/host_preview/out/
 .DS_Store
 release/
+
+# provenance signing: private material never enters the repo
+tools/sign/secret/
+*.sign.key
+tools/sign/__pycache__/
