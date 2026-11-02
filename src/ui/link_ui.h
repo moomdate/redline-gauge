@@ -8,7 +8,7 @@
 
 namespace link_ui {
 
-enum Action : uint8_t { ACT_NONE, ACT_BACK };
+enum Action : uint8_t { ACT_NONE, ACT_BACK, ACT_SCAN };
 
 void   invalidate();                                                    // next render() repaints
 void   render(const LinkStatus &st, uint32_t now, const Settings &s);   // repaints on change only

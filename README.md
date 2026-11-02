@@ -124,7 +124,8 @@ SIM AUTO loops a scripted drive: idle → city → full-throttle pull through th
      name looks like an OBD adapter (`OBDII`, `OBD2`, `V-LINK`, `VEEPEAK`, `KONNWEI`, `Vgate`…).
    - Its MAC is saved, so later boots connect straight away without scanning.
    - The PIN is tried as 1234 → 0000 → 6789 → 1111 automatically.
-3. Still `NO ADAPTER`? Open `pio device monitor`, read the scan list, then type:
+3. Or pair on screen: tap the OBD BT status pill -> **BT SCAN** -> tap your adapter -> **PAIR**
+   (the PIN is tried automatically, no typing). Or over serial, read the scan list and type:
    - `obd=AA:BB:CC:DD:EE:FF` to pick an adapter with an unusual name,
    - `obdpin=xxxx` to fix the PIN,
    - `obd=scan` to forget the saved adapter.

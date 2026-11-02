@@ -4,6 +4,17 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.9.0] - 2026-11-02
+
+### Added
+- **On-screen Bluetooth pairing** (OBD BT): tap the status pill -> **BT SCAN** to open a modal that
+  lists nearby adapters; tap one and press **PAIR** to connect and remember it. The PIN is tried
+  automatically (1234 / 0000 / 6789 / 1111) - no typing. Still works over serial (`obd=…`, `obdpin=…`).
+
+### Fixed
+- **Scan finds more adapters**: unnamed Bluetooth devices (some ELM327 / V-LINK clones don't send a
+  name in the inquiry) are each asked for their name instead of stopping at the first that doesn't answer.
+
 ## [1.8.1] - 2026-11-01
 
 ### Added

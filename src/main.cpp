@@ -25,6 +25,8 @@
 #include "data/custom_source.h"
 #include "data/honda_source.h"
 #include "ui/link_ui.h"
+#include "ui/scan_ui.h"
+#include "data/obd_source.h"
 #include "ui/gauge_model.h"
 #include "ui/gauge_ui.h"
 #include "ui/settings_ui.h"
@@ -423,7 +425,7 @@ static void updateOutputs(const GaugeView *v) {
 }
 
 // ---- screens ------------------------------------------------------------------------------------
-enum Screen { SCR_GAUGE, SCR_SETTINGS, SCR_TIMER, SCR_LOG, SCR_LINK };
+enum Screen { SCR_GAUGE, SCR_SETTINGS, SCR_TIMER, SCR_LOG, SCR_LINK, SCR_BTSCAN };
 static Screen screen = SCR_GAUGE;
 
 // ---- drag timer ---------------------------------------------------------------------------------
@@ -540,6 +542,13 @@ static void runTouchCal() {
     repaintScreen();
 }
 
+static void openBtScan() {
+    screen = SCR_BTSCAN;
+    SimSource::touchThrottle = 0;
+    scan_ui::open();
+    ObdSource::requestScan();                      // the data task scans; the modal shows the list
+}
+
 static void openLink() {
     screen = SCR_LINK;
     SimSource::touchThrottle = 0;
@@ -557,6 +566,7 @@ static void repaintScreen() {                      // after something drew over 
         case SCR_TIMER:    backToTimer(); break;
         case SCR_LOG:      timer_ui::drawLog(runLog); break;
         case SCR_LINK:     link_ui::invalidate(); break;
+        case SCR_BTSCAN:   scan_ui::invalidate(); break;
         default:           gauge_ui::setTheme(kThemes[settings.theme]); break;
     }
 }
@@ -657,7 +667,28 @@ static void handleTouch() {
     if (screen == SCR_LINK) {
         if (!pressed && down) {
             down = false;
-            if (link_ui::tap(sx, sy) == link_ui::ACT_BACK) { click(); closeSettings(); }
+            switch (link_ui::tap(sx, sy)) {
+                case link_ui::ACT_BACK: click(); closeSettings(); break;
+                case link_ui::ACT_SCAN: click(); openBtScan(); break;
+                default: break;
+            }
+        }
+        return;
+    }
+
+    if (screen == SCR_BTSCAN) {
+        if (!pressed && down) {
+            down = false;
+            switch (scan_ui::tap(sx, sy)) {
+                case scan_ui::ACT_CLOSE:  click(); openLink(); break;
+                case scan_ui::ACT_RESCAN: click(); ObdSource::requestScan(); break;
+                case scan_ui::ACT_PAIR:
+                    click();
+                    if (scan_ui::selectedMac()[0]) ObdSource::selectDevice(scan_ui::selectedMac());
+                    openLink();
+                    break;
+                default: break;
+            }
         }
         return;
     }
@@ -840,8 +871,13 @@ void loop() {
     gauge_ui::setLink(hasLink ? &link : nullptr, now);
     if (screen == SCR_LINK && !hasLink) closeSettings();  // source changed over serial
 
+    if (screen == SCR_BTSCAN && !hasLink) closeSettings();   // source changed away from OBD
+
     if (screen == SCR_LINK) {
         link_ui::render(link, now, settings);
+        updateOutputs(nullptr);
+    } else if (screen == SCR_BTSCAN) {
+        scan_ui::render(now, settings);
         updateOutputs(nullptr);
     } else if (screen == SCR_GAUGE) {
         gauge_ui::render(view);

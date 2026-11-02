@@ -15,6 +15,23 @@ static volatile bool s_bt = false;           // Bluetooth link to the adapter is
 static char s_adapter[18] = "";              // MAC of the adapter in use (data task writes)
 static volatile uint8_t s_pids = 0;          // supported PIDs found at the last ECU search
 
+// ---- UI-driven Bluetooth scan (pair modal) ----
+static ObdSource::BtDevice s_scan[ObdSource::kMaxScan];
+static int s_scanN = 0;
+static volatile int s_scanState = 0;         // 0 idle, 1 scanning, 2 done
+static volatile bool s_scanReq = false;
+static portMUX_TYPE s_scanLock = portMUX_INITIALIZER_UNLOCKED;
+
+void ObdSource::requestScan() { s_scanState = 1; s_scanReq = true; }
+int  ObdSource::scanState() { return s_scanState; }
+int  ObdSource::scanResults(BtDevice *out, int max) {
+    portENTER_CRITICAL(&s_scanLock);
+    int n = s_scanN < max ? s_scanN : max;
+    for (int i = 0; i < n; i++) out[i] = s_scan[i];
+    portEXIT_CRITICAL(&s_scanLock);
+    return n;
+}
+
 static const char *hintFor(const char *reason) {
     if (!strcmp(reason, "NO ADAPTER")) return "Adapter not found: plugged in? powered?";
     if (!strcmp(reason, "BT FAIL"))    return "Bluetooth didn't start: restart the gauge";
@@ -97,6 +114,13 @@ bool ObdSource::command(const char *line) {
     return ok;
 }
 
+void ObdSource::selectDevice(const char *mac) {
+    Preferences p;
+    if (p.begin("obd", false)) { p.putString("mac", mac); p.end(); }
+    s_retarget = true;                       // poll() reloads the target and reconnects
+    Serial.printf("[obd] selected %s (pairing)\n", mac);
+}
+
 void ObdSource::loadTarget() {
     Preferences p;
     mac_[0] = pin_[0] = 0;
@@ -116,14 +140,14 @@ static void saveMac(const char *mac) {
     p.end();
 }
 
-// Scan ~10 s, log every device, return the best OBD-looking one (strongest signal).
-// Older ELM327 clones (Bluetooth 2.0) don't put their name in the inquiry reply, so
+// Scan ~10 s and return every device found (name, MAC, signal, whether it looks like an OBD
+// adapter). Older ELM327 clones (Bluetooth 2.0) don't put their name in the inquiry reply, so
 // unnamed devices get an explicit remote-name request before we judge them.
-bool ObdSource::scan(char *macOut) {
+int ObdSource::scanInto(BtDevice *out, int max) {
     connecting("BT SCAN");
     Serial.println("[obd] scanning for Bluetooth Classic devices (10 s)...");
     BTScanResults *r = SerialBT.discover(10240);
-    if (!r) { Serial.println("[obd] scan failed"); return false; }
+    if (!r) { Serial.println("[obd] scan failed"); return 0; }
     int n = r->getCount();
     if (n > 16) n = 16;
     char names[16][32];
@@ -140,33 +164,44 @@ bool ObdSource::scan(char *macOut) {
     for (int i = 0; i < n; i++) {
         if (names[i][0] || unnamedAsked >= 6) continue;      // cap: each try can take ~6 s
         unnamedAsked++;
-        bool got = false;
         char rn[ESP_BT_GAP_MAX_BDNAME_LEN + 1];
         SerialBT.invalidateRemoteName();
         SerialBT.requestRemoteName((uint8_t *)addrs[i].getNative());
-        // The reply carries no address, and the stack refuses a new request while one is
-        // pending (page timeout ~5 s): wait long enough, and stop asking after a timeout so
-        // a late answer can't be pinned on the next device.
-        for (uint32_t t0 = millis(); millis() - t0 < 6000; delay(50)) {
-            if (SerialBT.readRemoteName(rn)) { strlcpy(names[i], rn, sizeof names[i]); got = true; break; }
-        }
-        if (!got) { SerialBT.invalidateRemoteName(); break; }
+        // wait for this device's name, then move on to the NEXT unnamed one (not break: a single
+        // clone that won't answer must not stop us naming the rest, e.g. an unnamed V-LINK)
+        for (uint32_t t0 = millis(); millis() - t0 < 6000; delay(50))
+            if (SerialBT.readRemoteName(rn)) { strlcpy(names[i], rn, sizeof names[i]); break; }
+        SerialBT.invalidateRemoteName();
     }
-    int best = -1, bestRssi = -1000;
-    for (int i = 0; i < n; i++) {
+    int cnt = 0;
+    for (int i = 0; i < n && cnt < max; i++) {
         bool obd = obdNameLooksLikeAdapter(names[i], OBD_BT_NAME);
         Serial.printf("[obd]   %s  %-20s rssi=%d%s\n", addrs[i].toString(true).c_str(),
                       names[i][0] ? names[i] : "(no name)", rssis[i], obd ? "  <- OBD" : "");
-        if (obd && rssis[i] > bestRssi) { best = i; bestRssi = rssis[i]; }
+        BtDevice &e = out[cnt++];
+        strlcpy(e.name, names[i][0] ? names[i] : "(no name)", sizeof e.name);
+        strlcpy(e.mac, addrs[i].toString(true).c_str(), sizeof e.mac);
+        e.rssi = (int16_t)rssis[i];
+        e.isObd = obd;
     }
     SerialBT.discoverClear();
+    return cnt;
+}
+
+// Pick the strongest OBD-looking device for the auto-connect flow.
+bool ObdSource::scan(char *macOut) {
+    BtDevice list[16];
+    int n = scanInto(list, 16);
+    int best = -1, bestRssi = -1000;
+    for (int i = 0; i < n; i++)
+        if (list[i].isObd && list[i].rssi > bestRssi) { best = i; bestRssi = list[i].rssi; }
     if (best < 0) {
         Serial.printf("[obd] %d device(s), none named like an OBD adapter.\n"
-                      "[obd] Pick yours from the list and type  obd=AA:BB:CC:DD:EE:FF\n"
-                      "[obd] Nothing at all? The adapter may be BLE-only, unpowered, or a phone is still connected to it.\n", n);
+                      "[obd] Pick yours on screen (BLUETOOTH > PAIR) or type  obd=AA:BB:CC:DD:EE:FF\n"
+                      "[obd] Nothing at all? BLE-only, unpowered, or a phone is still connected to it.\n", n);
         return false;
     }
-    strlcpy(macOut, addrs[best].toString(true).c_str(), 18);
+    strlcpy(macOut, list[best].mac, 18);
     return true;
 }
 
@@ -313,6 +348,18 @@ bool ObdSource::usable(int idx) const {
 }
 
 void ObdSource::poll() {
+    if (s_scanReq && btStarted_) {           // on-screen BLUETOOTH modal asked for a scan
+        s_scanReq = false;
+        if (SerialBT.connected()) SerialBT.disconnect();     // free the radio for a clean inquiry
+        BtDevice list[kMaxScan];
+        int n = scanInto(list, kMaxScan);
+        portENTER_CRITICAL(&s_scanLock);
+        s_scanN = n;
+        for (int i = 0; i < n; i++) s_scan[i] = list[i];
+        portEXIT_CRITICAL(&s_scanLock);
+        s_scanState = 2;
+        state_ = S_CONNECT;                  // resume (reconnect, to a new pick if one was made)
+    }
     if (s_retarget) {                       // obd=… typed: drop the link, reconnect to the new target
         s_retarget = false;
         if (s_forgetBond && btStarted_ && mac_[0]) forgetBond(mac_);

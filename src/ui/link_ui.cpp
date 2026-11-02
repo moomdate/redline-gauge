@@ -12,6 +12,8 @@ namespace link_ui {
 
 struct Rect { int x, y, w, h; };
 static const Rect R_DONE = { 250, 4, 64, 22 };
+static const Rect R_SCAN = { 170, 4, 74, 22 };   // OBD BT only: open the pair modal
+static bool s_isObd = false;
 static const Rect R_CARD = { 8, 38, 304, 62 };
 
 #define C_TEXT   0xd9e2e7
@@ -125,6 +127,7 @@ static void compose(Canvas &cv, const Page &p, const LinkStatus &k, const Theme 
     int tw = cv.text(font_ui, 12, 20, k.title, C(t.accentBright), ALIGN_LEFT, 2);
     cv.text(font_small, 12 + tw + 10, 19, k.subtitle, C(C_MUTED), ALIGN_LEFT, 1);
     button(cv, t, R_DONE, "DONE");
+    if (!strcmp(k.title, "OBD BT")) button(cv, t, R_SCAN, "BT SCAN");
     for (int x = 8; x < 312; x++) cv.blendPixel(x, 30, C(t.accent), (uint8_t)(255 - (x - 8) * 200 / 304));
 
     // status card: tinted panel with a coloured left rail
@@ -155,6 +158,7 @@ static void compose(Canvas &cv, const Page &p, const LinkStatus &k, const Theme 
 void invalidate() { s_key[0] = 0; }
 
 void render(const LinkStatus &st, uint32_t now, const Settings &s) {
+    s_isObd = !strcmp(st.title, "OBD BT");
     const Theme &t = kThemes[s.theme];
     Page p = build(st, now, t);
     char key[sizeof s_key];
@@ -175,6 +179,7 @@ void render(const LinkStatus &st, uint32_t now, const Settings &s) {
 
 Action tap(int x, int y) {
     if (inside(R_DONE, x, y)) return ACT_BACK;
+    if (s_isObd && inside(R_SCAN, x, y)) return ACT_SCAN;
     return ACT_NONE;
 }
 

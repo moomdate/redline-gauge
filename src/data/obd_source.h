@@ -21,6 +21,18 @@ public:
     // Saved to NVS; safe to call from another core. Returns false if not understood.
     static bool command(const char *arg);
 
+    // One device found by a Bluetooth scan (for the on-screen pair modal).
+    struct BtDevice { char name[24]; char mac[18]; int16_t rssi; bool isObd; };
+    static const int kMaxScan = 12;
+    // UI-driven scan, used while OBD BT is the active source (the stack is already up).
+    // requestScan() asks the data task to scan; scanState() = 0 idle / 1 scanning / 2 done;
+    // scanResults() copies the list; selectDevice() pairs with one (same as obd=<mac>).
+    // All safe to call from the UI core.
+    static void requestScan();
+    static int  scanState();
+    static int  scanResults(BtDevice *out, int max);
+    static void selectDevice(const char *mac);
+
     // Drag timer open: poll speed every other request instead of ~1 in 6.
     static volatile bool fastSpeed;
 
@@ -45,6 +57,7 @@ private:
     bool elm(const char *cmd, uint32_t timeoutMs);
     void loadTarget();
     bool scan(char *macOut);
+    int  scanInto(BtDevice *out, int max);   // fill the list; returns count
     bool usable(int idx) const;
     void forgetBond(const char *mac);
     bool readPid(int idx);
