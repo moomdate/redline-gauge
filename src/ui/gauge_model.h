@@ -34,6 +34,7 @@ struct GaugeView {
     bool  mapValid;       int map;
     bool  ignitionValid;  float ignition;
     bool  o2MvValid;      int o2Mv;
+    bool  loadValid;      int load;        // calculated engine load %
     bool  hybrid;        // show the hybrid panel set (settings, or AUTO + data seen)
     bool  socValid;   int   soc;     Level socLvl;
     bool  kwValid;    float kw;
