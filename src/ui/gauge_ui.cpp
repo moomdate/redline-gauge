@@ -429,6 +429,7 @@ static bool itemValid(uint8_t item, const GaugeView &v) {
         case PI_MAP:        return v.mapValid;
         case PI_IGNITION:   return v.ignitionValid;
         case PI_O2_MV:      return v.o2MvValid;
+        case PI_LOAD:       return v.loadValid;
         default:          return false;
     }
 }
@@ -440,6 +441,10 @@ static void drawItem(int i, uint8_t item, const GaugeView &v) {
         snprintf(buf, sizeof buf, "%.1f", v.volt);
         drawPanel(i, PANEL2_LABEL, v.voltValid, buf, "V", levelColor(v.voltLvl, s_theme->good, v.blink),
                   (v.volt - VOLT_BAR_MIN) / (VOLT_BAR_MAX - VOLT_BAR_MIN));
+        break;
+    case PI_LOAD:
+        snprintf(buf, sizeof buf, "%d", v.load);
+        drawPanel(i, "LOAD", v.loadValid, buf, "%", s_theme->accentBright, v.load / 100.0f);
         break;
     case PI_INTAKE:
         snprintf(buf, sizeof buf, "%d", v.iat);

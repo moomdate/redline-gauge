@@ -7,7 +7,7 @@
 //   {"rpm":3200,"speed":86,"coolant":87,"voltage":13.9,"iat":42}
 // Keys (case-insensitive): rpm | spd,speed,kmh | clt,coolant,ect | v,volt,voltage,batt
 //                          | iat,intake | gear | tps,throttle | fuel,fuellevel | fuelrate
-//                          | stft | ltft | map | ign,ignition | o2,o2mv
+//                          | stft | ltft | map | ign,ignition | o2,o2mv | load
 // See tools/serial_feed.py for a ready-made sender.
 #include "data/source.h"
 

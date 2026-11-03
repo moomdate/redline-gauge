@@ -36,6 +36,8 @@ public:
     // Drag timer open: poll speed every other request instead of ~1 in 6.
     static volatile bool fastSpeed;
 
+    static constexpr uint8_t kMaxPids = 24;   // size of the per-PID tables (static_assert in the .cpp)
+
 private:
     enum State : uint8_t { S_BT_START, S_CONNECT, S_INIT, S_SEARCH, S_RUN, S_WAIT };
     State    state_ = S_BT_START;
@@ -44,7 +46,7 @@ private:
     bool     btStarted_ = false;
     uint8_t  slot_ = 0;
     uint8_t  errors_ = 0;
-    uint8_t  noData_[15] = {};       // per-PID "NO DATA" counter, >=3 = unsupported
+    uint8_t  noData_[kMaxPids] = {}; // per-PID "NO DATA" counter, >=3 = unsupported
     char     resp_[160];
     char     mac_[18] = {};          // adapter to connect to ("" = scan)
     char     pin_[17] = {};           // fixed PIN ("" = cycle the common ones)

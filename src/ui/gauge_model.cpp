@@ -138,6 +138,10 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
     v.ignition = s.value[CH_IGNITION];
     v.o2MvValid = fresh(s, CH_O2_MV, now);
     v.o2Mv = (int)lroundf(s.value[CH_O2_MV]);
+    v.loadValid = fresh(s, CH_LOAD, now);
+    v.load = (int)lroundf(s.value[CH_LOAD]);
+    if (v.load < 0) v.load = 0;
+    if (v.load > 100) v.load = 100;
 
     v.socValid = fresh(s, CH_HV_SOC, now);
     v.soc = (int)lroundf(s.value[CH_HV_SOC]);

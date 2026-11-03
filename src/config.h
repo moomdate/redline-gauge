@@ -28,7 +28,7 @@
 #define VOLT_BAR_MAX       16.0f
 #define IAT_BAR_MIN         -10
 #define IAT_BAR_MAX          80
-#define AFR_RICH          13.8f    // AFR panel (HONDA K): below = rich (warning colour)
+#define AFR_RICH          13.8f    // AFR panel (HONDA K, OBD BT): below = rich (warning colour)
 #define AFR_LEAN          15.2f    //                       above = lean (blue)
 #define AFR_BAR_MIN       12.0f
 #define AFR_BAR_MAX       17.0f
@@ -63,6 +63,9 @@
 #define OBD_BT_MAC         ""       // optional fixed MAC (or type obd=AA:BB:… on serial; the found one is saved)
 #define OBD_BT_PIN         "1234"   // tried first, then 1234 / 0000 / 6789 / 1111 (obdpin=… fixes one)
 #define OBD_CMD_TIMEOUT_MS 1500
+// OBD BT AFR panel: PID 0134 (O2 sensor 1 equivalence ratio, lambda) x this = air-fuel ratio.
+// 14.7 = petrol (what most apps use); gasohol E10 is closer to 14.1.
+#define OBD_AFR_STOICH     14.7f
 
 // ---- Serial input (USB) ------------------------------------------------------
 #define SERIAL_BAUD      115200
