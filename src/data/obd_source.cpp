@@ -81,6 +81,10 @@ static void buildPinList() {
     for (const char *p : kCommonPins) if (strcmp(p, OBD_BT_PIN)) kPins[kPinCount++] = p;
 }
 volatile bool ObdSource::fastSpeed = false;
+static volatile uint32_t s_want = 0xFFFFFFFFu;   // PanelItem bits to poll (all, until main.cpp says what is shown)
+static volatile uint32_t s_supported = 0;        // PanelItem bits the car can fill (set after the ECU search)
+void ObdSource::setShownItems(const uint8_t items[3]) { s_want = obdWantMask(items); }
+uint32_t ObdSource::supportedItems() { return s_supported; }
 static volatile bool s_retarget = false;    // set by serial commands (core 1)
 static volatile bool s_forgetBond = false;  // obd=scan: also drop the pairing key
 static volatile uint32_t s_passkey = 1234;  // SSP passkey answer = the PIN being tried
@@ -232,13 +236,17 @@ static const PidDef kPids[] = {
 };
 static_assert(sizeof kPids / sizeof kPids[0] == P_COUNT, "kPids / enum mismatch");
 static_assert(P_COUNT <= ObdSource::kMaxPids, "ObdSource::noData_ is too small for the PID list");
-// RPM alternates with the other PID requests; unsupported PIDs are skipped from this rotation.
-static const uint8_t kSchedule[] = {
-    P_RPM, P_SPEED, P_RPM, P_COOLANT, P_RPM, P_IAT, P_RPM, P_VOLT,
-    P_RPM, P_TPS, P_RPM, P_FUEL_LEVEL, P_RPM, P_FUEL_RATE, P_RPM, P_STFT,
-    P_RPM, P_LTFT, P_RPM, P_MAP, P_RPM, P_IGNITION, P_RPM, P_O2,
-    P_RPM, P_AFR, P_RPM, P_LOAD,
-    P_RPM, P_HV, P_RPM, P_HV_SOC,
+// The right-hand panel item each PID feeds; PI_COUNT = not a panel value, always polled.
+static const uint8_t kPidItem[P_COUNT] = {
+    PI_COUNT, PI_COUNT, PI_COOLANT, PI_INTAKE, PI_VOLTAGE, PI_COUNT, PI_COUNT,
+    PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV, PI_AFR, PI_LOAD,
+};
+// RPM is polled on every other request. The requests in between walk through this list; entries the car
+// doesn't support or that no right-hand panel shows (see usable()) are skipped, so what IS shown gets the
+// slots. Speed and throttle come twice per round.
+static const uint8_t kOthers[] = {
+    P_SPEED, P_TPS, P_COOLANT, P_IAT, P_VOLT, P_FUEL_LEVEL, P_FUEL_RATE, P_STFT, P_LTFT,
+    P_SPEED, P_TPS, P_MAP, P_IGNITION, P_O2, P_AFR, P_LOAD, P_HV, P_HV_SOC,
 };
 
 void ObdSource::retryIn(uint32_t ms, State then, const char *msg) {
@@ -253,6 +261,7 @@ void ObdSource::retryIn(uint32_t ms, State then, const char *msg) {
 void ObdSource::begin() {
     state_ = S_BT_START;
     slot_ = 0;
+    rpmTurn_ = false;
     buildPinList();
     pinIdx_ = startPinIdx();
     macFails_ = 0;
@@ -265,12 +274,14 @@ void ObdSource::begin() {
     s_link.start();
     s_bt = false;
     s_pids = 0;
+    s_supported = 0;
     connecting("BT START");
 }
 
 void ObdSource::end() {
     s_link.stop();
     s_bt = false;
+    s_supported = 0;
     if (btStarted_) {
         SerialBT.disconnect();
         SerialBT.end();
@@ -342,6 +353,7 @@ void ObdSource::forgetBond(const char *mac) {
 
 // Without a 0100 bitmask (some ECUs answer it oddly) fall back to the NO DATA counter.
 bool ObdSource::usable(int idx) const {
+    if (!obdItemWanted(s_want, kPidItem[idx])) return false;   // no panel shows it
     uint8_t pid = kPids[idx].pid;
     if (pid == 0) return true;                             // ATRV is the adapter itself
     if (pidMask_[0]) {
@@ -478,6 +490,7 @@ void ObdSource::poll() {
             }
             memset(noData_, 0, sizeof noData_);
             nodataRun_ = 0;
+            s_supported = obdSupportedItems(pidMask_);
             Serial.printf("[obd] ECU found, PIDs 01-A0: %08lX %08lX %08lX %08lX %08lX\n",
                           (unsigned long)pidMask_[0], (unsigned long)pidMask_[1], (unsigned long)pidMask_[2],
                           (unsigned long)pidMask_[3], (unsigned long)pidMask_[4]);
@@ -496,15 +509,15 @@ void ObdSource::poll() {
         break;
 
     case S_RUN: {
-        // next schedule entry whose PID the car actually supports
+        // RPM on every other request; between them the next supported, shown entry of kOthers
         int idx = P_RPM;
         static bool speedTurn = false;
         speedTurn = !speedTurn;
         if (fastSpeed && speedTurn) idx = P_SPEED;          // drag timer: speed every other request
-        else for (int tries = 0; tries < (int)sizeof(kSchedule); tries++) {
-            idx = kSchedule[slot_];
-            slot_ = (slot_ + 1) % sizeof(kSchedule);
-            if (usable(idx)) break;                        // skip PIDs this car doesn't support
+        else if (rpmTurn_) rpmTurn_ = false;                // idx stays P_RPM
+        else {
+            rpmTurn_ = true;
+            idx = obdPickOther(kOthers, sizeof kOthers, slot_, [this](int p) { return usable(p); }, P_RPM);
         }
         if (readPid(idx) && nodataRun_ < 12) {
             errors_ = 0;

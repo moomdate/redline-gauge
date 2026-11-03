@@ -1,6 +1,7 @@
 // Host unit tests — run with:  pio test -e native
 // Everything here is the real firmware code, compiled for the host.
 #include <unity.h>
+#include <initializer_list>
 #include <math.h>
 #include <string.h>
 
@@ -814,6 +815,63 @@ static void test_extra_panel_items_are_selectable() {
     }
 }
 
+// Build supported-PID pages like a car would answer 0100 / 0120 / 0140 ... (bit 31 of page 0 = PID 01)
+static void pidPages(uint32_t pm[5], std::initializer_list<int> pids) {
+    memset(pm, 0, 5 * sizeof(uint32_t));
+    for (int pid : pids) {
+        int pg = (pid - 1) / 0x20;
+        pm[pg] |= 1u << (32 - (pid - pg * 0x20));
+    }
+}
+
+static void test_obd_polls_only_shown_items() {
+    uint32_t pm[5];
+    // supported-PID list of a Honda Jazz GE8 (read off Torque, plus the "more pages" bits 20 / 40)
+    pidPages(pm, {0x01, 0x03, 0x04, 0x05, 0x06, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x13, 0x15, 0x1F, 0x20,
+                  0x21, 0x2E, 0x30, 0x31, 0x33, 0x34, 0x40,
+                  0x41, 0x42, 0x43, 0x44, 0x45, 0x47, 0x49, 0x4A, 0x4C});
+    TEST_ASSERT_TRUE(obdHasPid(pm, 0x34));
+    TEST_ASSERT_FALSE(obdHasPid(pm, 0x2F));
+    const uint32_t jazz = (1u << PI_COOLANT) | (1u << PI_VOLTAGE) | (1u << PI_INTAKE) | (1u << PI_AFR) |
+                          (1u << PI_THROTTLE) | (1u << PI_STFT) | (1u << PI_MAP) | (1u << PI_IGNITION) | (1u << PI_LOAD);
+    TEST_ASSERT_EQUAL_HEX32(jazz, obdSupportedItems(pm));                   // no fuel level / rate, LTFT or O2 mV
+    uint32_t none[5] = {};
+    TEST_ASSERT_EQUAL_HEX32((1u << PI_COUNT) - 1, obdSupportedItems(none));  // no bitmask: offer everything
+
+    // only what the three panels show is polled; RPM / speed / hybrid slots (PI_COUNT) always are
+    const uint8_t shown[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+    uint32_t want = obdWantMask(shown);
+    TEST_ASSERT_EQUAL_HEX32(0x07, want);
+    TEST_ASSERT_TRUE(obdItemWanted(want, PI_COOLANT));
+    TEST_ASSERT_FALSE(obdItemWanted(want, PI_THROTTLE));
+    TEST_ASSERT_FALSE(obdItemWanted(want, PI_MAP));
+    TEST_ASSERT_TRUE(obdItemWanted(want, PI_COUNT));
+    const uint8_t junk[3] = { 200, PI_AFR, 255 };
+    TEST_ASSERT_EQUAL_HEX32(1u << PI_AFR, obdWantMask(junk));                // out-of-range items ignored
+
+    // the poll list: next usable entry, cycling; the fallback when nothing is usable
+    static const uint8_t list[] = { 1, 2, 3, 4 };
+    uint8_t slot = 0;
+    auto only24 = [](int p) { return p == 2 || p == 4; };
+    TEST_ASSERT_EQUAL_INT(2, obdPickOther(list, sizeof list, slot, only24, -1));
+    TEST_ASSERT_EQUAL_INT(4, obdPickOther(list, sizeof list, slot, only24, -1));
+    TEST_ASSERT_EQUAL_INT(2, obdPickOther(list, sizeof list, slot, only24, -1));   // wrapped
+    TEST_ASSERT_EQUAL_INT(-1, obdPickOther(list, sizeof list, slot, [](int) { return false; }, -1));
+
+    // a tap steps through what the car CAN fill, even while hidden items have no live data
+    GaugeView v = {};
+    gauge_ui::begin(push, kThemes[0]);
+    gauge_ui::setPanelItems(shown);
+    TEST_ASSERT_EQUAL_UINT8(PI_AFR, gauge_ui::nextPanelItem(2, v, jazz));
+    const uint8_t items2[3] = { PI_COOLANT, PI_VOLTAGE, PI_THROTTLE };
+    gauge_ui::setPanelItems(items2);
+    TEST_ASSERT_EQUAL_UINT8(PI_STFT, gauge_ui::nextPanelItem(2, v, jazz));   // fuel level / rate: not on this car
+    const uint8_t items3[3] = { PI_COOLANT, PI_VOLTAGE, PI_LOAD };
+    gauge_ui::setPanelItems(items3);
+    TEST_ASSERT_EQUAL_UINT8(PI_INTAKE, gauge_ui::nextPanelItem(2, v, jazz)); // wraps past the shown COOLANT / VOLTAGE
+    gauge_ui::setPanelItems(shown);
+}
+
 static void test_honda_kline_frames() {
     // fixed frames from the protocol references must checksum to zero
     TEST_ASSERT_EQUAL_HEX8(0x8C, hkChecksum(HK_PING, 3));
@@ -1166,6 +1224,7 @@ int main(int, char **) {
     RUN_TEST(test_honda_kline_frames);
     RUN_TEST(test_honda_o2_afr);
     RUN_TEST(test_afr_panel);
+    RUN_TEST(test_obd_polls_only_shown_items);
     RUN_TEST(test_extra_panel_items_are_selectable);
     RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);

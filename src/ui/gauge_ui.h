@@ -29,8 +29,9 @@ void setPanelItems(const uint8_t items[3]);
 // Tap on a panel: which one (0..2), -1 = none. The hybrid panels (2 and 3 in HYBRID) are fixed.
 int  hitPanel(int x, int y, const GaugeView &v);
 // The item panel `i` steps to on a tap: the next one with live data that no other panel shows
-// (any next one when nothing has data, e.g. before the link is up).
-uint8_t nextPanelItem(int i, const GaugeView &v);
+// (any next one when nothing has data, e.g. before the link is up). `avail` (bit n = PanelItem n)
+// replaces "has live data" with "the source can supply it"; 0 = judge by live data.
+uint8_t nextPanelItem(int i, const GaugeView &v, uint32_t avail = 0);
 int  lastPushedRegions();            // how many regions the last render() pushed
 Canvas &canvas();                    // shared scratch canvas (also used by the settings screen)
 PushFn  pushFn();
