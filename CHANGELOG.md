@@ -36,6 +36,15 @@ new features bump the middle number, fixes the last one.
 - **SETTINGS page redesign**: the on/off options (BEEP, GEAR, UNITS, PANELS, K-UART, RESET PEAK) moved into
   an OPTIONS zone of checkbox toggles, making room without crowding; themes, data source and shift RPM unchanged.
 
+## [1.9.3] - 2026-11-04
+
+### Fixed
+- **ST7789 build now matches the official CYD2USB config** (the 1.9.1/1.9.2 ST7789 images could show a
+  white screen). It uses the portrait-native 240x320 geometry, software reset (RST off GPIO, MISO on 12),
+  BGR colour order and inversion off, per witnessmenow's CYD2USB User_Setup. A `[tft]` line is printed at
+  boot (driver + resolution) to make display issues easier to diagnose, and a build guard now errors if two
+  TFT drivers are ever defined at once.
+
 ## [1.9.2] - 2026-11-04
 
 ### Added

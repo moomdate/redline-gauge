@@ -896,6 +896,11 @@ void setup() {
     tft.invertDisplay(settings.invert);              // saved choice beats the build default
     tft.setRotation(1);
     tft.setSwapBytes(true);                          // canvas holds plain RGB565
+#if defined(ST7789_DRIVER)
+    Serial.printf("[tft] ST7789 %dx%d @ %d Hz\n", TFT_WIDTH, TFT_HEIGHT, SPI_FREQUENCY);
+#else
+    Serial.printf("[tft] ILI9341 %dx%d @ %d Hz\n", TFT_WIDTH, TFT_HEIGHT, SPI_FREQUENCY);
+#endif
     backlightBegin();
     setBacklight(settings.brightness);
     pinMode(BOOT_BTN_PIN, INPUT_PULLUP);
