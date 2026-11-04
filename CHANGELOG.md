@@ -4,6 +4,12 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.9.2] - 2026-11-04
+
+### Added
+- **ST7789 build at 40 MHz SPI** (`redline-v1.9.2-cyd-st7789-spi40-*.bin`) for a 2USB panel that
+  speckles or shifts at 80 MHz. Same panel as `cyd-st7789`, colours inverted by default (COLORS flips it).
+
 ## [1.9.1] - 2026-11-04
 
 ### Added
