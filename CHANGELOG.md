@@ -4,6 +4,13 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [1.9.1] - 2026-11-04
+
+### Added
+- **ST7789 panel build** for the "2USB" CYD (the variant with both micro-USB and USB-C, whose screen is
+  ST7789 instead of ILI9341): `redline-v1.9.1-cyd-st7789-*.bin`. Colours are inverted by default; flip
+  COLORS on the SETUP page if they look wrong. Single-USB boards keep the usual `invert` / `noinvert` images.
+
 ## [1.9.0] - 2026-11-02
 
 ### Added

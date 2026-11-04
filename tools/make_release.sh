@@ -11,6 +11,7 @@
 #   invert-dim  esp32dev-dim   like "invert", for boards whose backlight dims (BRIGHTNESS)
 #   noinvert-dim cyd-noinvert-dim  like "noinvert", with BRIGHTNESS
 #   <any>-spi40  <env>-spi40    the same with the display SPI at 40 MHz (for panels that glitch at 80)
+#   cyd-st7789   cyd-st7789     the "2USB" CYD (micro-USB + USB-C) whose panel is ST7789, not ILI9341
 #
 # Env: PIO (default: pio), PY (python that can run esptool; default: python3).
 set -euo pipefail
