@@ -4,6 +4,21 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [Unreleased]
+
+### Added
+- **ENGINE LOAD panel** (`LOAD`, tap a right-hand panel): calculated engine load, OBD BT PID `0104`. Serial key `load=`.
+- **AFR over OBD BT**: PID `0134` (O2 sensor 1 equivalence ratio, lambda) x `OBD_AFR_STOICH` (14.7) feeds the
+  existing AFR panel. On a car with a wideband (A/F) sensor this is a measurement; an inactive sensor (engine
+  off, warming up) or a fuel cut reads about lambda 2.0 (29.4).
+
+### Changed
+- **OBD BT polls only what the three right-hand panels show.** RPM, speed and the hybrid values are always polled;
+  the panel values (coolant, voltage, intake, throttle, fuel, trims, MAP, ignition, O2, AFR, load) only while a panel
+  shows them, so the visible ones update more often. RPM is exactly every other request (a skipped entry used to
+  turn into an extra RPM request). Tapping a panel steps through the values the car supports (from its PID list),
+  not just those that happen to have fresh data right now.
+
 ## [1.9.2] - 2026-11-04
 
 ### Added

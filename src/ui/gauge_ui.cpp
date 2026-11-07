@@ -429,6 +429,7 @@ static bool itemValid(uint8_t item, const GaugeView &v) {
         case PI_MAP:        return v.mapValid;
         case PI_IGNITION:   return v.ignitionValid;
         case PI_O2_MV:      return v.o2MvValid;
+        case PI_LOAD:       return v.loadValid;
         default:          return false;
     }
 }
@@ -440,6 +441,10 @@ static void drawItem(int i, uint8_t item, const GaugeView &v) {
         snprintf(buf, sizeof buf, "%.1f", v.volt);
         drawPanel(i, PANEL2_LABEL, v.voltValid, buf, "V", levelColor(v.voltLvl, s_theme->good, v.blink),
                   (v.volt - VOLT_BAR_MIN) / (VOLT_BAR_MAX - VOLT_BAR_MIN));
+        break;
+    case PI_LOAD:
+        snprintf(buf, sizeof buf, "%d", v.load);
+        drawPanel(i, "LOAD", v.loadValid, buf, "%", s_theme->accentBright, v.load / 100.0f);
         break;
     case PI_INTAKE:
         snprintf(buf, sizeof buf, "%d", v.iat);
@@ -575,14 +580,17 @@ int hitPanel(int x, int y, const GaugeView &v) {
     return -1;
 }
 
-uint8_t nextPanelItem(int i, const GaugeView &v) {
+uint8_t nextPanelItem(int i, const GaugeView &v, uint32_t avail) {
+    // avail != 0: the source says which items it can fill (a source that polls only what is shown has no
+    // fresh data for the hidden ones); 0: judge by which items have live data right now
+    auto ok = [&](int k) { return avail ? ((avail >> k) & 1) != 0 : itemValid(k, v); };
     bool any = false;
-    for (int k = 0; k < PI_COUNT; k++) any |= itemValid(k, v);
+    for (int k = 0; k < PI_COUNT; k++) any |= ok(k);
     for (int step = 1; step < PI_COUNT; step++) {
         uint8_t c = (s_items[i] + step) % PI_COUNT;
         bool shown = false;
         for (int j = 0; j < 3; j++) shown |= j != i && s_items[j] == c && !(v.hybrid && j > 0);
-        if (!shown && (!any || itemValid(c, v))) return c;
+        if (!shown && (!any || ok(c))) return c;
     }
     return s_items[i];
 }

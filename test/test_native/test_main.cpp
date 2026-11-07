@@ -1,6 +1,7 @@
 // Host unit tests — run with:  pio test -e native
 // Everything here is the real firmware code, compiled for the host.
 #include <unity.h>
+#include <initializer_list>
 #include <math.h>
 #include <string.h>
 
@@ -97,7 +98,7 @@ static void test_fonts_cover_every_ui_string() {
     TEST_ASSERT_TRUE(fontHas(font_speed, "0123456789-N"));
     TEST_ASSERT_TRUE(fontHas(font_value, "0123456789.-"));
     TEST_ASSERT_TRUE(fontHas(font_label, "SPEED " PANEL1_LABEL PANEL2_LABEL PANEL3_LABEL
-                                         "FUEL RATE STFT LTFT MAP IGN ADV O2 SENSOR"));
+                                         "FUEL RATE STFT LTFT MAP IGN ADV O2 SENSOR LOAD"));
     TEST_ASSERT_TRUE(fontHas(font_small, "ENGINE SPEED PEAK RPM km/h GEAR °C V SETUP " STATUS_TITLE
                                          "BEEP ON OFF RESET THEME DATA SOURCE SHIFT LIGHT BRIGHTNESS % kW L/h KPA DEG mV"));
     for (int i = 0; i < PANELS_COUNT; i++) TEST_ASSERT_TRUE(fontHas(font_small, settings_ui::kPanelLabels[i]));
@@ -201,6 +202,15 @@ static void test_obd_parse() {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, v);
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("411180", 0x11, v));
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("41043C", 0x04, v));           // engine load A*100/255
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.53f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("413480008000", 0x34, v));     // lambda 1.000 -> AFR
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("41347333A000", 0x34, v));     // 0x7333 = lambda 0.900 (rich)
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.9f * OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4134FFFE8000", 0x34, v));     // sensor not active / fuel cut: ~lambda 2
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f * OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_BAD, obdParsePid("413480", 0x34, v));          // second byte missing
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("412F80", 0x2F, v));
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4114808000", 0x14, v));
@@ -246,7 +256,10 @@ static void test_model_extra_telemetry_and_staleness() {
     s.value[CH_MAP] = 34; s.stamp[CH_MAP] = g_host_ms;
     s.value[CH_IGNITION] = 12.5f; s.stamp[CH_IGNITION] = g_host_ms;
     s.value[CH_O2_MV] = 450; s.stamp[CH_O2_MV] = g_host_ms;
+    s.value[CH_LOAD] = 37.4f; s.stamp[CH_LOAD] = g_host_ms;
     m.update(s, g_host_ms, "TEST", v);
+    TEST_ASSERT_TRUE(v.loadValid);
+    TEST_ASSERT_EQUAL_INT(37, v.load);
     TEST_ASSERT_TRUE(v.fuelLevelValid);
     TEST_ASSERT_EQUAL_INT(65, v.fuelLevel);
     TEST_ASSERT_TRUE(v.fuelRateValid);
@@ -788,11 +801,11 @@ static void test_extra_panel_items_are_selectable() {
     GaugeView v = {};
     v.afrValid = v.tpsValid = true;
     v.fuelLevelValid = v.fuelRateValid = v.stftValid = v.ltftValid = true;
-    v.mapValid = v.ignitionValid = v.o2MvValid = true;
+    v.mapValid = v.ignitionValid = v.o2MvValid = v.loadValid = true;
     uint8_t items[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
     gauge_ui::setPanelItems(items);
     const uint8_t expected[] = {
-        PI_AFR, PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV
+        PI_AFR, PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV, PI_LOAD
     };
     for (uint8_t item : expected) {
         uint8_t next = gauge_ui::nextPanelItem(2, v);
@@ -800,6 +813,63 @@ static void test_extra_panel_items_are_selectable() {
         items[2] = next;
         gauge_ui::setPanelItems(items);
     }
+}
+
+// Build supported-PID pages like a car would answer 0100 / 0120 / 0140 ... (bit 31 of page 0 = PID 01)
+static void pidPages(uint32_t pm[5], std::initializer_list<int> pids) {
+    memset(pm, 0, 5 * sizeof(uint32_t));
+    for (int pid : pids) {
+        int pg = (pid - 1) / 0x20;
+        pm[pg] |= 1u << (32 - (pid - pg * 0x20));
+    }
+}
+
+static void test_obd_polls_only_shown_items() {
+    uint32_t pm[5];
+    // supported-PID list of a Honda Jazz GE8 (read off Torque, plus the "more pages" bits 20 / 40)
+    pidPages(pm, {0x01, 0x03, 0x04, 0x05, 0x06, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x13, 0x15, 0x1F, 0x20,
+                  0x21, 0x2E, 0x30, 0x31, 0x33, 0x34, 0x40,
+                  0x41, 0x42, 0x43, 0x44, 0x45, 0x47, 0x49, 0x4A, 0x4C});
+    TEST_ASSERT_TRUE(obdHasPid(pm, 0x34));
+    TEST_ASSERT_FALSE(obdHasPid(pm, 0x2F));
+    const uint32_t jazz = (1u << PI_COOLANT) | (1u << PI_VOLTAGE) | (1u << PI_INTAKE) | (1u << PI_AFR) |
+                          (1u << PI_THROTTLE) | (1u << PI_STFT) | (1u << PI_MAP) | (1u << PI_IGNITION) | (1u << PI_LOAD);
+    TEST_ASSERT_EQUAL_HEX32(jazz, obdSupportedItems(pm));                   // no fuel level / rate, LTFT or O2 mV
+    uint32_t none[5] = {};
+    TEST_ASSERT_EQUAL_HEX32((1u << PI_COUNT) - 1, obdSupportedItems(none));  // no bitmask: offer everything
+
+    // only what the three panels show is polled; RPM / speed / hybrid slots (PI_COUNT) always are
+    const uint8_t shown[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
+    uint32_t want = obdWantMask(shown);
+    TEST_ASSERT_EQUAL_HEX32(0x07, want);
+    TEST_ASSERT_TRUE(obdItemWanted(want, PI_COOLANT));
+    TEST_ASSERT_FALSE(obdItemWanted(want, PI_THROTTLE));
+    TEST_ASSERT_FALSE(obdItemWanted(want, PI_MAP));
+    TEST_ASSERT_TRUE(obdItemWanted(want, PI_COUNT));
+    const uint8_t junk[3] = { 200, PI_AFR, 255 };
+    TEST_ASSERT_EQUAL_HEX32(1u << PI_AFR, obdWantMask(junk));                // out-of-range items ignored
+
+    // the poll list: next usable entry, cycling; the fallback when nothing is usable
+    static const uint8_t list[] = { 1, 2, 3, 4 };
+    uint8_t slot = 0;
+    auto only24 = [](int p) { return p == 2 || p == 4; };
+    TEST_ASSERT_EQUAL_INT(2, obdPickOther(list, sizeof list, slot, only24, -1));
+    TEST_ASSERT_EQUAL_INT(4, obdPickOther(list, sizeof list, slot, only24, -1));
+    TEST_ASSERT_EQUAL_INT(2, obdPickOther(list, sizeof list, slot, only24, -1));   // wrapped
+    TEST_ASSERT_EQUAL_INT(-1, obdPickOther(list, sizeof list, slot, [](int) { return false; }, -1));
+
+    // a tap steps through what the car CAN fill, even while hidden items have no live data
+    GaugeView v = {};
+    gauge_ui::begin(push, kThemes[0]);
+    gauge_ui::setPanelItems(shown);
+    TEST_ASSERT_EQUAL_UINT8(PI_AFR, gauge_ui::nextPanelItem(2, v, jazz));
+    const uint8_t items2[3] = { PI_COOLANT, PI_VOLTAGE, PI_THROTTLE };
+    gauge_ui::setPanelItems(items2);
+    TEST_ASSERT_EQUAL_UINT8(PI_STFT, gauge_ui::nextPanelItem(2, v, jazz));   // fuel level / rate: not on this car
+    const uint8_t items3[3] = { PI_COOLANT, PI_VOLTAGE, PI_LOAD };
+    gauge_ui::setPanelItems(items3);
+    TEST_ASSERT_EQUAL_UINT8(PI_INTAKE, gauge_ui::nextPanelItem(2, v, jazz)); // wraps past the shown COOLANT / VOLTAGE
+    gauge_ui::setPanelItems(shown);
 }
 
 static void test_honda_kline_frames() {
@@ -1154,6 +1224,7 @@ int main(int, char **) {
     RUN_TEST(test_honda_kline_frames);
     RUN_TEST(test_honda_o2_afr);
     RUN_TEST(test_afr_panel);
+    RUN_TEST(test_obd_polls_only_shown_items);
     RUN_TEST(test_extra_panel_items_are_selectable);
     RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);

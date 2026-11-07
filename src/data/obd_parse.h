@@ -5,6 +5,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "config.h"      // OBD_AFR_STOICH
+#include "settings.h"    // PanelItem
 
 enum ObdResult : uint8_t { OBD_OK, OBD_NODATA, OBD_BAD };
 
@@ -36,6 +38,7 @@ inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
             return OBD_OK;
         }
         case 0x0D: out = (float)A; return OBD_OK;
+        case 0x04: out = A * (100.0f / 255.0f); return OBD_OK;       // calculated engine load
         case 0x06:
         case 0x07: out = A * (100.0f / 128.0f) - 100.0f; return OBD_OK;
         case 0x0B: out = (float)A; return OBD_OK;
@@ -48,6 +51,12 @@ inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
             out = A * 5.0f;
             return OBD_OK;
         case 0x2F: out = A * (100.0f / 255.0f); return OBD_OK;
+        case 0x34: {                                    // 41 34 A B C D: lambda = (A*256+B)/32768 -> AFR
+            int B = obdHexByte(p + 6);                  // (C D = sensor current, not used)
+            if (B < 0) return OBD_BAD;
+            out = (A * 256 + B) / 32768.0f * OBD_AFR_STOICH;
+            return OBD_OK;
+        }
         case 0x5E: {
             int B = obdHexByte(p + 6);
             if (B < 0) return OBD_BAD;
@@ -137,4 +146,51 @@ inline uint32_t obdSupportedPidsPage(const char *resp, uint8_t base) {
 inline uint32_t obdSupportedPids(const char *resp) { return obdSupportedPidsPage(resp, 0x00); }
 inline bool obdPidSupported(uint32_t mask, uint8_t pid, uint8_t base = 0x00) {
     return pid > base && pid <= base + 0x20 && ((mask >> (32 - (pid - base))) & 1);
+}
+
+// ---- side-panel items <-> PIDs -------------------------------------------------------------------
+static_assert(PI_COUNT <= 32, "the panel-item masks are 32 bit");
+
+// Does the car list `pid` in its supported-PID bitmasks (pm[0..4] = pages 0100, 0120 ... 0180)?
+inline bool obdHasPid(const uint32_t pm[5], uint8_t pid) {
+    int pg = (pid - 1) / 0x20;
+    return pg < 5 && obdPidSupported(pm[pg], pid, (uint8_t)(pg * 0x20));
+}
+
+// Which right-hand panel items this car can fill: bit n = PanelItem n. VOLTAGE comes from the adapter itself,
+// so it always can. No bitmask (pm[0] == 0, an ECU that answers 0100 oddly): everything is offered.
+inline uint32_t obdSupportedItems(const uint32_t pm[5]) {
+    if (!pm[0]) return (uint32_t)((1ull << PI_COUNT) - 1);
+    struct { uint8_t item, pid; } const map[] = {
+        { PI_COOLANT, 0x05 }, { PI_INTAKE, 0x0F }, { PI_AFR, 0x34 }, { PI_THROTTLE, 0x11 },
+        { PI_FUEL_LEVEL, 0x2F }, { PI_FUEL_RATE, 0x5E }, { PI_STFT, 0x06 }, { PI_LTFT, 0x07 },
+        { PI_MAP, 0x0B }, { PI_IGNITION, 0x0E }, { PI_O2_MV, 0x14 }, { PI_LOAD, 0x04 },
+    };
+    uint32_t m = 1u << PI_VOLTAGE;
+    for (auto &e : map) if (obdHasPid(pm, e.pid)) m |= 1u << e.item;
+    return m;
+}
+
+// Items shown on the three panels -> bit mask of what has to be polled.
+inline uint32_t obdWantMask(const uint8_t items[3]) {
+    uint32_t m = 0;
+    for (int i = 0; i < 3; i++) if (items[i] < PI_COUNT) m |= 1u << items[i];
+    return m;
+}
+
+// Is a poll slot worth a request? item >= PI_COUNT (RPM, speed, hybrid ...) is always polled.
+inline bool obdItemWanted(uint32_t wantMask, uint8_t item) {
+    return item >= PI_COUNT || ((wantMask >> item) & 1);
+}
+
+// Next usable entry of a poll list (cycles through it, `slot` remembers where it stopped);
+// `fallback` when none is usable. RPM is polled on every other request around this.
+template <typename Usable>
+inline int obdPickOther(const uint8_t *list, size_t n, uint8_t &slot, Usable usable, int fallback) {
+    for (size_t tries = 0; tries < n; tries++) {
+        int cand = list[slot];
+        slot = (uint8_t)((slot + 1) % n);
+        if (usable(cand)) return cand;
+    }
+    return fallback;
 }
