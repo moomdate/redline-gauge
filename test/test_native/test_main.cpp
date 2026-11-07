@@ -802,6 +802,63 @@ static void test_extra_panel_items_are_selectable() {
     }
 }
 
+static void test_gear_tracking_automatic() {
+#if GEAR_COUNT >= 2 && GEAR_HOLD
+    static const float ratios[GEAR_COUNT] = GEAR_RATIOS;
+    int cand = 0;
+    uint32_t candAt = 0;
+    // standing still: N
+    TEST_ASSERT_EQUAL_INT(0, trackGear(2, 0, 800, 0, cand, candAt, 1000));
+    // pulling away with the converter slipping: nothing fits, but it is 1st, not N
+    TEST_ASSERT_EQUAL_INT(1, trackGear(0, 0, 2200, 8, cand, candAt, 1000));
+    // a real match is shown at once when coming from N, and stays
+    TEST_ASSERT_EQUAL_INT(2, trackGear(0, 2, 2400, 25, cand, candAt, 1000));
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 2, 2400, 25, cand, candAt, 1010));
+    // a different gear has to stay the estimate for GEAR_CONFIRM_MS first
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 3, 2400, 30, cand, candAt, 1020));
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 3, 2400, 30, cand, candAt, 1020 + GEAR_CONFIRM_MS - 10));
+    TEST_ASSERT_EQUAL_INT(3, trackGear(2, 3, 2400, 30, cand, candAt, 1020 + GEAR_CONFIRM_MS + 10));
+    // a one-off estimate that goes away again never changes the gear
+    TEST_ASSERT_EQUAL_INT(3, trackGear(3, 4, 2400, 40, cand, candAt, 2000));
+    TEST_ASSERT_EQUAL_INT(3, trackGear(3, 3, 2400, 40, cand, candAt, 2050));
+    TEST_ASSERT_EQUAL_INT(3, trackGear(3, 4, 2400, 40, cand, candAt, 2100));      // timer restarted
+    // lifting off at low speed: rpm falls to idle, nothing fits, the gear is held ...
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 0, 800, 25, cand, candAt, 3000));
+    // idle coasting can coincide with a tall gear (800 rpm at 25 km/h); it must not become the gear
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 4, 800, 25, cand, candAt, 3050));
+    TEST_ASSERT_EQUAL_INT(2, trackGear(2, 4, 800, 25, cand, candAt, 3050 + 3 * GEAR_CONFIRM_MS));
+    // ... and steps down as the car slows: at this speed 2nd would run below GEAR_HOLD_MIN_RPM
+    float v2low = (GEAR_HOLD_MIN_RPM - 100) * 3.6f * TIRE_CIRCUMFERENCE_M / (60.0f * ratios[1] * FINAL_DRIVE);
+    TEST_ASSERT_EQUAL_INT(1, trackGear(2, 0, 800, v2low, cand, candAt, 3100));
+    TEST_ASSERT_EQUAL_INT(0, trackGear(1, 0, 800, 2, cand, candAt, 3200));        // and N once stopped
+    // the held gear also moves up when the engine could not be turning that fast in it
+    float v1high = (GEAR_HOLD_MAX_RPM + 500) * 3.6f * TIRE_CIRCUMFERENCE_M / (60.0f * ratios[0] * FINAL_DRIVE);
+    TEST_ASSERT_EQUAL_INT(2, trackGear(1, 0, 3000, v1high, cand, candAt, 3300));
+
+    // through the model: lift-off keeps the gear, a stop shows N
+    GaugeModel m;
+    GaugeView v = {};
+    m.reset(10000);
+    bus::clear();
+    g_host_ms = 10000;
+    auto frame = [&](float rpm, float spd) {
+        g_host_ms += 33;
+        bus::publish(CH_RPM, rpm);
+        bus::publish(CH_SPEED, spd);
+        GaugeSnapshot s;
+        bus::snapshot(s);
+        m.update(s, g_host_ms, "TEST", v);
+    };
+    float wheel25 = (25 / 3.6f) / TIRE_CIRCUMFERENCE_M * 60.0f;
+    for (int i = 0; i < 20; i++) frame(wheel25 * ratios[1] * FINAL_DRIVE, 25);   // 2nd, locked
+    TEST_ASSERT_EQUAL_INT(2, v.gear);
+    for (int i = 0; i < 20; i++) frame(800, 25);                                   // lifted off: rpm to idle
+    TEST_ASSERT_EQUAL_INT(2, v.gear);
+    for (int i = 0; i < 20; i++) frame(800, 0);
+    TEST_ASSERT_EQUAL_INT(0, v.gear);
+#endif
+}
+
 static void test_honda_kline_frames() {
     // fixed frames from the protocol references must checksum to zero
     TEST_ASSERT_EQUAL_HEX8(0x8C, hkChecksum(HK_PING, 3));
@@ -1168,6 +1225,7 @@ int main(int, char **) {
     RUN_TEST(test_model_hybrid_panels_and_gear_off);
     RUN_TEST(test_model_extra_telemetry_and_staleness);
     RUN_TEST(test_gear_estimate);
+    RUN_TEST(test_gear_tracking_automatic);
     RUN_TEST(test_model_levels_and_shift);
     RUN_TEST(test_model_marks_stale_values);
     RUN_TEST(test_simulator_stays_physical);

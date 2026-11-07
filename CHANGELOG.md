@@ -4,6 +4,16 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [Unreleased]
+
+### Added
+- **Automatic-gearbox gear tracking** (`GEAR_HOLD` in config.h): when the torque converter slips or the engine
+  idles while rolling (pulling away, lifting off at low speed) the last gear is held instead of showing N,
+  pulling away from a stop shows 1st, the held gear steps down / up with speed, an idle-coasting "match"
+  (800 rpm at 25 km/h can coincide with a tall gear) is ignored, and a new gear shows once it has been the
+  estimate for 150 ms so one stale sample doesn't flicker it. N only when stopped. `GEAR_HOLD 0` restores
+  the old behaviour (N whenever nothing fits).
+
 ## [1.9.2] - 2026-11-04
 
 ### Added
