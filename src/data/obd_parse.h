@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "config.h"      // OBD_AFR_STOICH
 
 enum ObdResult : uint8_t { OBD_OK, OBD_NODATA, OBD_BAD };
 
@@ -36,6 +37,7 @@ inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
             return OBD_OK;
         }
         case 0x0D: out = (float)A; return OBD_OK;
+        case 0x04: out = A * (100.0f / 255.0f); return OBD_OK;       // calculated engine load
         case 0x06:
         case 0x07: out = A * (100.0f / 128.0f) - 100.0f; return OBD_OK;
         case 0x0B: out = (float)A; return OBD_OK;
@@ -48,6 +50,12 @@ inline ObdResult obdParsePid(const char *resp, uint8_t pid, float &out) {
             out = A * 5.0f;
             return OBD_OK;
         case 0x2F: out = A * (100.0f / 255.0f); return OBD_OK;
+        case 0x34: {                                    // 41 34 A B C D: lambda = (A*256+B)/32768 -> AFR
+            int B = obdHexByte(p + 6);                  // (C D = sensor current, not used)
+            if (B < 0) return OBD_BAD;
+            out = (A * 256 + B) / 32768.0f * OBD_AFR_STOICH;
+            return OBD_OK;
+        }
         case 0x5E: {
             int B = obdHexByte(p + 6);
             if (B < 0) return OBD_BAD;

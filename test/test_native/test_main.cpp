@@ -97,7 +97,7 @@ static void test_fonts_cover_every_ui_string() {
     TEST_ASSERT_TRUE(fontHas(font_speed, "0123456789-N"));
     TEST_ASSERT_TRUE(fontHas(font_value, "0123456789.-"));
     TEST_ASSERT_TRUE(fontHas(font_label, "SPEED " PANEL1_LABEL PANEL2_LABEL PANEL3_LABEL
-                                         "FUEL RATE STFT LTFT MAP IGN ADV O2 SENSOR"));
+                                         "FUEL RATE STFT LTFT MAP IGN ADV O2 SENSOR LOAD"));
     TEST_ASSERT_TRUE(fontHas(font_small, "ENGINE SPEED PEAK RPM km/h GEAR °C V SETUP " STATUS_TITLE
                                          "BEEP ON OFF RESET THEME DATA SOURCE SHIFT LIGHT BRIGHTNESS % kW L/h KPA DEG mV"));
     for (int i = 0; i < PANELS_COUNT; i++) TEST_ASSERT_TRUE(fontHas(font_small, settings_ui::kPanelLabels[i]));
@@ -201,6 +201,15 @@ static void test_obd_parse() {
     TEST_ASSERT_FLOAT_WITHIN(0.01f, 0, v);
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("411180", 0x11, v));
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("41043C", 0x04, v));           // engine load A*100/255
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 23.53f, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("413480008000", 0x34, v));     // lambda 1.000 -> AFR
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("41347333A000", 0x34, v));     // 0x7333 = lambda 0.900 (rich)
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.9f * OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4134FFFE8000", 0x34, v));     // sensor not active / fuel cut: ~lambda 2
+    TEST_ASSERT_FLOAT_WITHIN(0.05f, 2.0f * OBD_AFR_STOICH, v);
+    TEST_ASSERT_EQUAL(OBD_BAD, obdParsePid("413480", 0x34, v));          // second byte missing
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("412F80", 0x2F, v));
     TEST_ASSERT_FLOAT_WITHIN(0.1f, 50.2f, v);
     TEST_ASSERT_EQUAL(OBD_OK, obdParsePid("4114808000", 0x14, v));
@@ -246,7 +255,10 @@ static void test_model_extra_telemetry_and_staleness() {
     s.value[CH_MAP] = 34; s.stamp[CH_MAP] = g_host_ms;
     s.value[CH_IGNITION] = 12.5f; s.stamp[CH_IGNITION] = g_host_ms;
     s.value[CH_O2_MV] = 450; s.stamp[CH_O2_MV] = g_host_ms;
+    s.value[CH_LOAD] = 37.4f; s.stamp[CH_LOAD] = g_host_ms;
     m.update(s, g_host_ms, "TEST", v);
+    TEST_ASSERT_TRUE(v.loadValid);
+    TEST_ASSERT_EQUAL_INT(37, v.load);
     TEST_ASSERT_TRUE(v.fuelLevelValid);
     TEST_ASSERT_EQUAL_INT(65, v.fuelLevel);
     TEST_ASSERT_TRUE(v.fuelRateValid);
@@ -788,11 +800,11 @@ static void test_extra_panel_items_are_selectable() {
     GaugeView v = {};
     v.afrValid = v.tpsValid = true;
     v.fuelLevelValid = v.fuelRateValid = v.stftValid = v.ltftValid = true;
-    v.mapValid = v.ignitionValid = v.o2MvValid = true;
+    v.mapValid = v.ignitionValid = v.o2MvValid = v.loadValid = true;
     uint8_t items[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE };
     gauge_ui::setPanelItems(items);
     const uint8_t expected[] = {
-        PI_AFR, PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV
+        PI_AFR, PI_THROTTLE, PI_FUEL_LEVEL, PI_FUEL_RATE, PI_STFT, PI_LTFT, PI_MAP, PI_IGNITION, PI_O2_MV, PI_LOAD
     };
     for (uint8_t item : expected) {
         uint8_t next = gauge_ui::nextPanelItem(2, v);
