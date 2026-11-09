@@ -56,6 +56,17 @@
 #define FINAL_DRIVE        4.06f
 #define TIRE_CIRCUMFERENCE_M 1.94f  // e.g. 205/55R16 ≈ 1.94 m
 #define GEAR_TOLERANCE     0.12f    // ±12 % of a ratio still counts as that gear
+// Automatic gearboxes: with the torque converter slipping or unlocked (pulling away, lifting off at
+// low speed) rpm and speed fit no gear. GEAR_HOLD 1 keeps the last gear while moving instead of showing N, starts
+// from 1st when pulling away from a stop, and steps the held gear down / up when the engine could not be turning
+// that slowly / quickly in it (what the box does on its own). A new gear is shown after it has been the
+// estimate for GEAR_CONFIRM_MS, so one stale speed or rpm sample doesn't flicker it. 0 = N whenever nothing fits;
+// the GEAR button on the settings page hides the gear entirely (hybrids / CVTs).
+#define GEAR_HOLD            1
+#define GEAR_LOCK_MIN_RPM  950      // a "match" below this rpm is idle coasting, not a locked gear (800 rpm at 25 km/h can look like a tall one)
+#define GEAR_HOLD_MIN_RPM  900      // a held gear is stepped down when its predicted rpm at this speed is lower
+#define GEAR_HOLD_MAX_RPM 5000      // ... and up when it is higher
+#define GEAR_CONFIRM_MS    150
 
 // ---- OBD-II over Bluetooth Classic (ELM327 "OBDII" dongles) -----------------
 // BLE-only adapters (Vgate iCar Pro BLE, some Veepeak) are NOT supported by this path.

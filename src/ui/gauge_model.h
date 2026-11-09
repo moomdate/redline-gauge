@@ -66,9 +66,16 @@ private:
     int      shiftRpm_ = RPM_SHIFT;
     uint8_t  panels_ = 0;            // PANELS_AUTO
     bool     gearOff_ = false;
+    int      gear_ = 0;              // gear shown last frame (GEAR_HOLD)
+    int      gearCand_ = 0;          // gear waiting to be confirmed
+    uint32_t gearCandAt_ = 0;
     bool     hybridSeen_ = false;    // AUTO latch: stays hybrid until the source changes
     bool     afrSeen_ = false;       // same, for the AFR panel
 };
+
+// Gear to show from the raw estimate (0 = nothing fits) and the one shown before; with GEAR_HOLD 0 it is `raw`.
+// Pure and unit-tested; `cand` / `candAt` are the debounce state.
+int trackGear(int held, int raw, float rpm, float speedKmh, int &cand, uint32_t &candAt, uint32_t now);
 
 // Estimate gear from rpm/speed using config.h ratios. 0 = no match (clutch/neutral).
 int estimateGear(float rpm, float speedKmh);

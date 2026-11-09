@@ -36,10 +36,36 @@ int estimateGear(float rpm, float speedKmh) {
 #endif
 }
 
+int trackGear(int held, int raw, float rpm, float speedKmh, int &cand, uint32_t &candAt, uint32_t now) {
+#if GEAR_COUNT > 0 && GEAR_HOLD
+    if (raw < 0) return raw;                                   // gears disabled
+    if (speedKmh < 3 || rpm < 400) { cand = 0; return 0; }     // standing still: N
+    if (raw > 0 && rpm < GEAR_LOCK_MIN_RPM) raw = 0;           // idling while rolling: coincides with a tall gear, but isn't one
+    static const float ratios[GEAR_COUNT] = GEAR_RATIOS;
+    float wheelRpm = (speedKmh / 3.6f) / TIRE_CIRCUMFERENCE_M * 60.0f;
+    auto predicted = [&](int g) { return wheelRpm * ratios[g - 1] * FINAL_DRIVE; };
+    if (raw > 0) {                                             // locked: a real match
+        if (held <= 0 || raw == held) { cand = 0; return raw; }
+        if (raw != cand) { cand = raw; candAt = now; return held; }
+        if ((int32_t)(now - candAt) >= GEAR_CONFIRM_MS) { cand = 0; return raw; }
+        return held;
+    }
+    cand = 0;                                                  // slipping / coasting: nothing fits
+    int g = held > 0 ? held : 1;                               // pulling away from N: 1st
+    while (g > 1 && predicted(g) < GEAR_HOLD_MIN_RPM) g--;
+    while (g < GEAR_COUNT && predicted(g) > GEAR_HOLD_MAX_RPM) g++;
+    return g;
+#else
+    (void)held; (void)rpm; (void)speedKmh; (void)cand; (void)candAt; (void)now;
+    return raw;
+#endif
+}
+
 void GaugeModel::reset(uint32_t now) {
     t0_ = now;
     last_ = now;
     rpmSmooth_ = speedSmooth_ = afrSmooth_ = 0;
+    gear_ = gearCand_ = 0;
     hybridSeen_ = afrSeen_ = false;
     resetPeaks();
 }
@@ -89,8 +115,10 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
 
     if (gearOff_) v.gear = -1;
     else if (fresh(s, CH_GEAR, now)) v.gear = (int)(s.value[CH_GEAR] + 0.5f);
-    else if (v.rpmValid && v.speedValid) v.gear = estimateGear(rpm, spd);
-    else v.gear = -1;
+    else if (v.rpmValid && v.speedValid) {
+        v.gear = trackGear(gear_, estimateGear(rpm, spd), rpm, spd, gearCand_, gearCandAt_, now);
+        gear_ = v.gear > 0 ? v.gear : 0;
+    } else { v.gear = -1; gear_ = gearCand_ = 0; }
 
     // ---- side panels -------------------------------------------------------------
     v.coolValid = fresh(s, CH_COOLANT, now);
