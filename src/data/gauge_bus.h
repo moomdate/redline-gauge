@@ -14,7 +14,7 @@ enum Channel : uint8_t {
     CH_THROTTLE,    // 0..100 %, informational
     CH_HV_SOC,      // hybrid battery state of charge, %
     CH_HV_KW,       // hybrid battery power, kW: + = driving the motor, - = charging / regen
-    CH_AFR,         // air-fuel ratio estimated from a narrowband O2 sensor (HONDA K)
+    CH_AFR,         // air-fuel ratio: narrowband estimate (HONDA K) or lambda x 14.7 (OBD BT, PID 0134)
     CH_FUEL_LEVEL,  // fuel tank level, %
     CH_FUEL_RATE,   // fuel rate, L/h
     CH_STFT,        // short-term fuel trim, %
@@ -22,6 +22,7 @@ enum Channel : uint8_t {
     CH_MAP,         // manifold absolute pressure, kPa
     CH_IGNITION,    // ignition timing advance, deg
     CH_O2_MV,       // oxygen sensor voltage, mV
+    CH_LOAD,        // calculated engine load, 0..100 % (OBD BT, PID 0104)
     CH_COUNT
 };
 

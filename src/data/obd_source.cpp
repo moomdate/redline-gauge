@@ -208,7 +208,7 @@ bool ObdSource::scan(char *macOut) {
 // PIDs we read. Index order matters for noData_[] and the schedule below.
 enum {
     P_RPM, P_SPEED, P_COOLANT, P_IAT, P_VOLT, P_HV_SOC, P_HV,
-    P_TPS, P_FUEL_LEVEL, P_FUEL_RATE, P_STFT, P_LTFT, P_MAP, P_IGNITION, P_O2, P_COUNT
+    P_TPS, P_FUEL_LEVEL, P_FUEL_RATE, P_STFT, P_LTFT, P_MAP, P_IGNITION, P_O2, P_AFR, P_LOAD, P_COUNT
 };
 struct PidDef { const char *cmd; uint8_t pid; Channel ch; };
 static const PidDef kPids[] = {
@@ -227,13 +227,17 @@ static const PidDef kPids[] = {
     {"010B", 0x0B, CH_MAP},
     {"010E", 0x0E, CH_IGNITION},
     {"0114", 0x14, CH_O2_MV},
+    {"0134", 0x34, CH_AFR},         // O2 sensor 1 equivalence ratio (lambda) x 14.7 -> AFR
+    {"0104", 0x04, CH_LOAD},        // calculated engine load
 };
 static_assert(sizeof kPids / sizeof kPids[0] == P_COUNT, "kPids / enum mismatch");
+static_assert(P_COUNT <= ObdSource::kMaxPids, "ObdSource::noData_ is too small for the PID list");
 // RPM alternates with the other PID requests; unsupported PIDs are skipped from this rotation.
 static const uint8_t kSchedule[] = {
     P_RPM, P_SPEED, P_RPM, P_COOLANT, P_RPM, P_IAT, P_RPM, P_VOLT,
     P_RPM, P_TPS, P_RPM, P_FUEL_LEVEL, P_RPM, P_FUEL_RATE, P_RPM, P_STFT,
     P_RPM, P_LTFT, P_RPM, P_MAP, P_RPM, P_IGNITION, P_RPM, P_O2,
+    P_RPM, P_AFR, P_RPM, P_LOAD,
     P_RPM, P_HV, P_RPM, P_HV_SOC,
 };
 
