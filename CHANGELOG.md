@@ -12,6 +12,13 @@ new features bump the middle number, fixes the last one.
   existing AFR panel. On a car with a wideband (A/F) sensor this is a measurement; an inactive sensor (engine
   off, warming up) or a fuel cut reads about lambda 2.0 (29.4).
 
+### Changed
+- **OBD BT polls only what the three right-hand panels show.** RPM, speed and the hybrid values are always polled;
+  the panel values (coolant, voltage, intake, throttle, fuel, trims, MAP, ignition, O2, AFR, load) only while a panel
+  shows them, so the visible ones update more often. RPM is exactly every other request (a skipped entry used to
+  turn into an extra RPM request). Tapping a panel steps through the values the car supports (from its PID list),
+  not just those that happen to have fresh data right now.
+
 ## [1.9.2] - 2026-11-04
 
 ### Added

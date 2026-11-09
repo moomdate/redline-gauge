@@ -36,6 +36,12 @@ public:
     // Drag timer open: poll speed every other request instead of ~1 in 6.
     static volatile bool fastSpeed;
 
+    // The three right-hand panels' items (PanelItem each). Only what they show is polled (RPM, speed and the
+    // hybrid values always are); until this is called everything is. Safe to call from another core.
+    static void setShownItems(const uint8_t items[3]);
+    // Panel items this car can fill (bit n = PanelItem n), known once the ECU search is done; 0 before that.
+    static uint32_t supportedItems();
+
     static constexpr uint8_t kMaxPids = 24;   // size of the per-PID tables (static_assert in the .cpp)
 
 private:
@@ -44,7 +50,8 @@ private:
     State    after_ = S_CONNECT;     // state to resume after S_WAIT
     uint32_t waitUntil_ = 0;
     bool     btStarted_ = false;
-    uint8_t  slot_ = 0;
+    uint8_t  slot_ = 0;              // position in the list of non-RPM requests
+    bool     rpmTurn_ = false;       // the next request is RPM
     uint8_t  errors_ = 0;
     uint8_t  noData_[kMaxPids] = {}; // per-PID "NO DATA" counter, >=3 = unsupported
     char     resp_[160];

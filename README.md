@@ -136,7 +136,8 @@ fuel level (012F), fuel rate (015E), STFT (0106), LTFT (0107), MAP (010B), ignit
 O2 sensor 1 voltage (0114, shown in mV), calculated engine load (0104) and air-fuel ratio from the O2 sensor 1
 equivalence ratio (0134, lambda x 14.7: a real measurement on cars with a wideband A/F sensor), plus hybrid
 battery SOC (015B) and power (019A) where available.
-Only PIDs the ECU lists in its supported-PID bitmasks (0100 … 0180) are polled; unsupported or stale values show `--`.
+Only PIDs the ECU lists in its supported-PID bitmasks (0100 … 0180) are polled, and of the panel values only those a
+right-hand panel is showing (RPM is every other request); unsupported or stale values show `--`.
 
 **Honda Forza 350 (2021):** Forza-specific diagnostic protocol and OBD PID compatibility have not been verified.
 This generic OBD-II support is not a claim that the bike exposes these PIDs. Do not connect an adapter to the bike

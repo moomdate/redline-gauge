@@ -511,6 +511,7 @@ static void applySettings(const Settings &next, bool repaint) {
     model.setPanels(next.panels);
     model.setGearHidden(next.gearMode == GEARMODE_OFF);
     gauge_ui::setPanelItems(next.panelItem);
+    ObdSource::setShownItems(next.panelItem);
     if (next.klineUart != prev.klineUart) {
         HondaKSource::setUart(next.klineUart);
         if (activeSrc == SRC_HONDA) g_reinitSrc = true;   // reconnect on the new pins
@@ -725,7 +726,8 @@ static void handleTouch() {
         int panel = gauge_ui::hitPanel(sx, sy, g_view);
         if (!longDone && millis() - downAt < 600 && panel >= 0) {
             Settings s = settings;                       // tap a side panel: next value
-            s.panelItem[panel] = gauge_ui::nextPanelItem(panel, g_view);
+            s.panelItem[panel] = gauge_ui::nextPanelItem(panel, g_view,
+                                     activeSrc == SRC_OBD ? ObdSource::supportedItems() : 0);
             click();
             applySettings(s, false);
         } else if (!longDone && millis() - downAt < 600 && gauge_ui::hitLink(sx, sy)) {
@@ -834,6 +836,7 @@ void setup() {
     model.setPanels(settings.panels);
     model.setGearHidden(settings.gearMode == GEARMODE_OFF);
     gauge_ui::setPanelItems(settings.panelItem);
+    ObdSource::setShownItems(settings.panelItem);
     HondaKSource::setUart(settings.klineUart);
     SimSource::hybrid = settings.panels == PANELS_HYBRID;
     requestedSrc = settings.source;

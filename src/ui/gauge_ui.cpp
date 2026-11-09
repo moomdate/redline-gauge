@@ -580,14 +580,17 @@ int hitPanel(int x, int y, const GaugeView &v) {
     return -1;
 }
 
-uint8_t nextPanelItem(int i, const GaugeView &v) {
+uint8_t nextPanelItem(int i, const GaugeView &v, uint32_t avail) {
+    // avail != 0: the source says which items it can fill (a source that polls only what is shown has no
+    // fresh data for the hidden ones); 0: judge by which items have live data right now
+    auto ok = [&](int k) { return avail ? ((avail >> k) & 1) != 0 : itemValid(k, v); };
     bool any = false;
-    for (int k = 0; k < PI_COUNT; k++) any |= itemValid(k, v);
+    for (int k = 0; k < PI_COUNT; k++) any |= ok(k);
     for (int step = 1; step < PI_COUNT; step++) {
         uint8_t c = (s_items[i] + step) % PI_COUNT;
         bool shown = false;
         for (int j = 0; j < 3; j++) shown |= j != i && s_items[j] == c && !(v.hybrid && j > 0);
-        if (!shown && (!any || itemValid(c, v))) return c;
+        if (!shown && (!any || ok(c))) return c;
     }
     return s_items[i];
 }
