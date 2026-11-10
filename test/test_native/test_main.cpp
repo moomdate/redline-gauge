@@ -32,6 +32,7 @@
 #include "fonts/font_speed.h"
 #include "fonts/font_ui.h"
 #include "fonts/font_value.h"
+#include "fonts/font_th.h"
 
 extern uint32_t g_host_ms;
 
@@ -110,9 +111,40 @@ static void test_fonts_cover_every_ui_string() {
 }
 
 static void test_font_tables_sorted() {
-    const GaugeFont *fonts[] = { &font_rpm, &font_speed, &font_value, &font_label, &font_small, &font_ui };
+    const GaugeFont *fonts[] = { &font_rpm, &font_speed, &font_value, &font_label, &font_small, &font_ui, &font_th };
     for (const GaugeFont *f : fonts)
         for (int i = 1; i < f->count; i++) TEST_ASSERT_TRUE(f->glyphs[i - 1].code < f->glyphs[i].code);
+}
+
+// Thai support: combining marks must have zero advance (they stack on the base),
+// add no text width, and render without writing outside the canvas region.
+static void test_thai_combining_marks() {
+    const GaugeGlyph *baseK = nullptr, *tone = nullptr, *lowerU = nullptr;
+    for (int i = 0; i < font_th.count; i++) {
+        uint16_t c = font_th.glyphs[i].code;
+        if (c == 0x0E01) baseK = &font_th.glyphs[i];   // ก consonant
+        if (c == 0x0E48) tone = &font_th.glyphs[i];    // ่ mai ek (upper tone)
+        if (c == 0x0E38) lowerU = &font_th.glyphs[i];  // ◌ุ sara u (lower vowel)
+    }
+    TEST_ASSERT_NOT_NULL(baseK);
+    TEST_ASSERT_NOT_NULL(tone);
+    TEST_ASSERT_NOT_NULL(lowerU);
+    TEST_ASSERT_TRUE(baseK->adv > 0);                  // base advances the pen
+    TEST_ASSERT_EQUAL_INT(0, tone->adv);               // combining marks do not
+    TEST_ASSERT_EQUAL_INT(0, lowerU->adv);
+    TEST_ASSERT_TRUE(tone->dy > 2);                    // upper tone sits above baseline
+
+    static uint16_t buf[320 * 48];
+    static uint16_t bg[320 * 240];
+    Canvas cv(buf, 320 * 48);
+    TEST_ASSERT_TRUE(cv.begin(0, 0, 320, 48, bg));
+    int wBase   = cv.textWidth(font_th, "\xE0\xB8\x81");                  // ก
+    int wMarked = cv.textWidth(font_th, "\xE0\xB8\x81\xE0\xB9\x88");      // ก่  (ก + tone)
+    int wTwo    = cv.textWidth(font_th, "\xE0\xB8\x81\xE0\xB8\x81");      // กก
+    TEST_ASSERT_EQUAL_INT(wBase, wMarked);             // mark adds no width
+    TEST_ASSERT_EQUAL_INT(2 * wBase, wTwo);            // two bases do advance twice
+    // ตั้งค่า has a stacked tone-over-vowel cluster; must render clip-safe.
+    cv.text(font_th, 4, 30, "\xE0\xB8\x95\xE0\xB8\xB1\xE0\xB9\x89\xE0\xB8\x87\xE0\xB8\x84\xE0\xB9\x88\xE0\xB8\xB2", rgb565(0xFFFFFF));
 }
 
 // ---- theme assets ---------------------------------------------------------------------------
@@ -1274,6 +1306,7 @@ int main(int, char **) {
     RUN_TEST(test_tabular_digits_have_equal_width);
     RUN_TEST(test_fonts_cover_every_ui_string);
     RUN_TEST(test_font_tables_sorted);
+    RUN_TEST(test_thai_combining_marks);
     RUN_TEST(test_theme_backgrounds_match_slot_geometry);
     RUN_TEST(test_serial_key_value);
     RUN_TEST(test_serial_json_and_aliases);

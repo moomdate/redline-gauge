@@ -116,11 +116,35 @@ static int digitCell(const GaugeFont &f) {
 
 static inline bool isDigit(uint16_t c) { return c >= '0' && c <= '9'; }
 
+// A zero-advance glyph is a combining mark (Thai vowels/tones) that stacks on
+// the preceding base glyph without moving the pen.
+static inline bool isCombining(const GaugeGlyph *g) { return g && g->adv == 0; }
+
+// Alpha-blend one glyph bitmap onto the canvas at pen-relative (gx, gy).
+static void blitGlyph(uint16_t *px, int w, int h, int x0, int y0,
+                      const GaugeFont &f, const GaugeGlyph *g, int gx, int gy, uint16_t c) {
+    if (gx + g->w <= x0 || gx >= x0 + w || gy + g->h <= y0 || gy >= y0 + h) return;
+    const uint8_t *bm = f.bitmap + g->offset;
+    for (int r = 0; r < g->h; r++) {
+        int sy = gy + r - y0;
+        if ((unsigned)sy >= (unsigned)h) continue;
+        for (int q = 0; q < g->w; q++) {
+            uint8_t a = bm[r * g->w + q];
+            if (!a) continue;
+            int sx = gx + q - x0;
+            if ((unsigned)sx >= (unsigned)w) continue;
+            uint16_t &d = px[sy * w + sx];
+            d = blend565(a, c, d);
+        }
+    }
+}
+
 int Canvas::textWidth(const GaugeFont &f, const char *s, int tracking, bool tabular) const {
     int cell = tabular ? digitCell(f) : 0, wsum = 0, n = 0;
     while (*s) {
         uint16_t code = nextCode(s);
         const GaugeGlyph *g = findGlyph(f, code);
+        if (isCombining(g)) continue;                     // overlays base, no width/tracking
         int adv = g ? g->adv : f.ascent / 3;
         if (tabular && isDigit(code)) adv = cell;
         wsum += adv + tracking;
@@ -135,32 +159,32 @@ int Canvas::text(const GaugeFont &f, int x, int y, const char *s, uint16_t c,
     if (align == ALIGN_RIGHT) x -= tw;
     else if (align == ALIGN_CENTER) x -= tw / 2;
     int cell = tabular ? digitCell(f) : 0;
+    int stackedUppers = 0;                                // upper marks already placed on current base
+    int liftStep = f.ascent / 3;                          // vertical gap when a tone stacks over a vowel
+    if (liftStep < 3) liftStep = 3;
 
     while (*s) {
         uint16_t code = nextCode(s);
         const GaugeGlyph *g = findGlyph(f, code);
-        if (!g) { x += f.ascent / 3 + tracking; continue; }
+        if (!g) { x += f.ascent / 3 + tracking; stackedUppers = 0; continue; }
+
+        if (isCombining(g)) {
+            // Combining mark: Pillow places it with a negative left bearing so it
+            // reaches back over the base already drawn at the current pen. Don't advance.
+            bool upper = g->dy > 2;                        // above baseline -> upper vowel/tone
+            int lift = (upper && stackedUppers > 0) ? stackedUppers * liftStep : 0;
+            int gx = x + g->dx, gy = y - g->dy - lift;
+            blitGlyph(px, w, h, x0, y0, f, g, gx, gy, c);
+            if (upper) stackedUppers++;
+            continue;                                      // no advance, no tracking
+        }
+        stackedUppers = 0;                                 // new base resets the stack
+
         int adv = g->adv, ox = 0;
         if (tabular && isDigit(code)) { ox = (cell - g->adv) / 2; adv = cell; }
 
         int gx = x + ox + g->dx, gy = y - g->dy;
-        if (gx + g->w <= x0 || gx >= x0 + w || gy + g->h <= y0 || gy >= y0 + h) {
-            x += adv + tracking;                              // glyph entirely outside this canvas
-            continue;
-        }
-        const uint8_t *bm = f.bitmap + g->offset;
-        for (int r = 0; r < g->h; r++) {
-            int sy = gy + r - y0;
-            if ((unsigned)sy >= (unsigned)h) continue;
-            for (int q = 0; q < g->w; q++) {
-                uint8_t a = bm[r * g->w + q];
-                if (!a) continue;
-                int sx = gx + q - x0;
-                if ((unsigned)sx >= (unsigned)w) continue;
-                uint16_t &d = px[sy * w + sx];
-                d = blend565(a, c, d);
-            }
-        }
+        blitGlyph(px, w, h, x0, y0, f, g, gx, gy, c);
         x += adv + tracking;
     }
     return tw;
