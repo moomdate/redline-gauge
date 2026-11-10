@@ -103,6 +103,7 @@ static void loadSettings() {
         for (int i = 0; i < 3; i++) if (items[i] < PI_COUNT) settings.panelItem[i] = items[i];
     settings.klineUart = prefs.getUChar("kuart", settings.klineUart);
     if (settings.klineUart != 0 && settings.klineUart != 2) settings.klineUart = 2;
+    settings.units = prefs.getUChar("units", settings.units) ? 1 : 0;
     if (settings.panels >= PANELS_COUNT) settings.panels = PANELS_AUTO;
     if (settings.gearMode >= GEARMODE_COUNT) settings.gearMode = GEARMODE_AUTO;
     if (settings.theme >= THEME_COUNT) settings.theme = 0;
@@ -125,6 +126,7 @@ static void saveSettings() {   // Preferences only writes keys whose value chang
     if (prefs.getBytes("pitems", items, sizeof items) != sizeof items || memcmp(items, settings.panelItem, sizeof items))
         prefs.putBytes("pitems", settings.panelItem, sizeof settings.panelItem);
     prefs.putUChar("kuart", settings.klineUart);
+    prefs.putUChar("units", settings.units);
 }
 
 static void backlightBegin() {
@@ -163,6 +165,7 @@ static void printHelp() {
         "  touchcal (or BOOT button)   touchcal=reset   touchcal=xmin,xmax,ymin,ymax,axis\n"
         "  timer   timerlog   timerlog=clear   kdump (HONDA K raw tables)   klineinvert=on|off\n"
         "  klineuart=2|0 (HONDA K pins: 2=GPIO22/27, 0=GPIO3/1 USB header; 0 turns the USB log off)\n"
+        "  units=kmh|mph (speed display)\n"
         "  obd=scan | obd=AA:BB:CC:DD:EE:FF   obdpin=1234|0000 (empty = auto)\n"
         "data (SERIAL mode):  rpm=3200 spd=86 clt=87 volt=13.9 iat=42 tps=30 fuel=65\n"
         "           or JSON:  {\"rpm\":3200,\"speed\":86,\"coolant\":87,\"voltage\":13.9}\n"
@@ -268,6 +271,8 @@ static void handleLine(char *line) {
     } else if (!strncasecmp(p, "timer", 5)) {
         openTimer();
         return;
+    } else if (keyIs(p, "units", &v)) {
+        s.units = (!strncasecmp(v, "mph", 3)) ? 1 : 0;
     } else if (keyIs(p, "klineuart", &v)) {
         s.klineUart = (atoi(v) == 0) ? 0 : 2;          // applied below via applySettings
     } else if (keyIs(p, "klineinvert", &v)) {
@@ -511,6 +516,8 @@ static void applySettings(const Settings &next, bool repaint) {
     model.setPanels(next.panels);
     model.setGearHidden(next.gearMode == GEARMODE_OFF);
     gauge_ui::setPanelItems(next.panelItem);
+    gauge_ui::setUnits(next.units);
+    timer_ui::setUnits(next.units);
     ObdSource::setShownItems(next.panelItem);
     if (next.klineUart != prev.klineUart) {
         HondaKSource::setUart(next.klineUart);
@@ -836,6 +843,8 @@ void setup() {
     model.setPanels(settings.panels);
     model.setGearHidden(settings.gearMode == GEARMODE_OFF);
     gauge_ui::setPanelItems(settings.panelItem);
+    gauge_ui::setUnits(settings.units);
+    timer_ui::setUnits(settings.units);
     ObdSource::setShownItems(settings.panelItem);
     HondaKSource::setUart(settings.klineUart);
     SimSource::hybrid = settings.panels == PANELS_HYBRID;

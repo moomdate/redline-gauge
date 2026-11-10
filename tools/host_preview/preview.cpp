@@ -144,6 +144,7 @@ int main() {
     staticFrame("out/design.ppm", 5600, 86, 87, 13.9f, 42, 3, Link::Live, "", "OBD BT");
     gauge_ui::setTheme(kThemes[THEME_LIME]);
     staticFrame("out/shift.ppm", 7250, 142, 106, 11.6f, 72, 4, Link::Simulated, "", "SIM AUTO");
+    gauge_ui::setUnits(1); staticFrame("out/speed_mph.ppm", 4200, 113, 92, 13.8f, 40, 3, Link::Live, "", "OBD BT"); gauge_ui::setUnits(0);
     staticFrame("out/cold.ppm", 1150, 0, 45, 12.2f, 30, 0, Link::Live, "", "SERIAL");
     gauge_ui::setTheme(kThemes[THEME_AMBER]);
     gauge_ui::setTheme(kThemes[THEME_ICE]);

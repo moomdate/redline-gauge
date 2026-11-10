@@ -1219,45 +1219,50 @@ static void test_settings_taps() {
     TEST_ASSERT_EQUAL_UINT8(SRC_HONDA, s.source);
     TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(300, 163, s));     // no 7th source (H TEST gone)
     TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(280, 14, s));     // DONE
-    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(98, 229, s));
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(159, 229, s));  // PANELS cycles
+    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(263, 230, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(58, 230, s));  // PANELS cycles
     TEST_ASSERT_EQUAL_UINT8(PANELS_STANDARD, s.panels);
-    settings_ui::tap(159, 229, s);
+    settings_ui::tap(58, 230, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_HYBRID, s.panels);
-    settings_ui::tap(159, 229, s);
+    settings_ui::tap(58, 230, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_AUTO, s.panels);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(220, 229, s));  // GEAR
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(161, 212, s));  // GEAR
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_OFF, s.gearMode);
-    settings_ui::tap(220, 229, s);
+    settings_ui::tap(161, 212, s);
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_AUTO, s.gearMode);
     TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(282, 229, s));  // K-UART toggles
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(161, 230, s));  // K-UART toggles
     TEST_ASSERT_EQUAL_UINT8(0, s.klineUart);
-    settings_ui::tap(282, 229, s);
+    settings_ui::tap(161, 230, s);
     TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(160, 144, s));     // between theme names and sources
+    TEST_ASSERT_EQUAL_UINT8(0, s.units);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(263, 212, s));  // UNITS km/h <-> mph
+    TEST_ASSERT_EQUAL_UINT8(1, s.units);
+    settings_ui::tap(263, 212, s);
+    TEST_ASSERT_EQUAL_UINT8(0, s.units);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(160, 139, s));     // between theme names and sources
 }
 
 static void test_settings_limits() {
     gauge_ui::begin(push, kThemes[0]);
     Settings s;
-    for (int i = 0; i < 40; i++) settings_ui::tap(129, 205, s);                  // SHIFT +
+    for (int i = 0; i < 40; i++) settings_ui::tap(118, 187, s);                  // SHIFT +
     TEST_ASSERT_EQUAL_UINT16(Settings::kShiftMax, s.shiftRpm);
-    for (int i = 0; i < 40; i++) settings_ui::tap(21, 205, s);                   // SHIFT -
+    for (int i = 0; i < 40; i++) settings_ui::tap(20, 187, s);                   // SHIFT -
     TEST_ASSERT_EQUAL_UINT16(Settings::kShiftMin, s.shiftRpm);
 #if BACKLIGHT_DIMMING
-    for (int i = 0; i < 10; i++) settings_ui::tap(181, 205, s);                  // BRIGHTNESS -
+    for (int i = 0; i < 10; i++) settings_ui::tap(180, 187, s);                  // BRIGHTNESS -
     TEST_ASSERT_EQUAL_UINT8(Settings::kBrightMin, s.brightness);
-    for (int i = 0; i < 10; i++) settings_ui::tap(289, 205, s);                  // BRIGHTNESS +
+    for (int i = 0; i < 10; i++) settings_ui::tap(280, 187, s);                  // BRIGHTNESS +
     TEST_ASSERT_EQUAL_UINT8(100, s.brightness);
 #else
     s.brightness = 100;                                                          // row hidden: taps ignored
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(181, 205, s));
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(289, 205, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(180, 187, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(280, 187, s));
     TEST_ASSERT_EQUAL_UINT8(100, s.brightness);
 #endif
     bool beep = s.beep;
-    settings_ui::tap(40, 229, s);                                                // BEEP toggle
+    settings_ui::tap(58, 212, s);                                                // BEEP toggle
     TEST_ASSERT_NOT_EQUAL(beep, s.beep);
 }
 

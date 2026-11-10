@@ -26,6 +26,7 @@ void render(const GaugeView &v);     // redraw regions whose content changed
 void setLink(const LinkStatus *st, uint32_t now);
 // What the three right-hand panels show (PanelItem each, from Settings::panelItem).
 void setPanelItems(const uint8_t items[3]);
+void setUnits(uint8_t units);        // 0 = km/h, 1 = mph (speed readouts)
 // Tap on a panel: which one (0..2), -1 = none. The hybrid panels (2 and 3 in HYBRID) are fixed.
 int  hitPanel(int x, int y, const GaugeView &v);
 // The item panel `i` steps to on a tap: the next one with live data that no other panel shows

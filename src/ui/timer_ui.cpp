@@ -16,7 +16,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "ui/gauge_model.h"
+
+static uint8_t s_units = 0;
+
 namespace timer_ui {
+
+void setUnits(uint8_t units) { uint8_t u = units ? 1 : 0; if (u != s_units) { s_units = u; invalidate(); } }
 
 // Same geometry as gauge_ui.cpp (it is baked into the background art).
 struct Rect { int x, y, w, h; };
@@ -336,7 +342,7 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
     fmtSec(tnum, sizeof tnum, 0);
     int kmh = speedValid ? (int)lroundf(t.speed()) : -1;
     if (kmh > 999) kmh = 999;
-    if (kmh >= 0) snprintf(num, sizeof num, "%d", kmh); else snprintf(num, sizeof num, "--");
+    if (kmh >= 0) snprintf(num, sizeof num, "%d", displaySpeed(kmh, s_units)); else snprintf(num, sizeof num, "--");
     snprintf(label, sizeof label, "SPEED");
     if (st == TS_RUN) {
         fmtSec(tnum, sizeof tnum, t.elapsed(now));
@@ -354,7 +360,7 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
         fmtSec(tnum, sizeof tnum, t.toMax());
         snprintf(tlabel, sizeof tlabel, "0-%d", (int)lroundf(t.maxKmh()));
         tColor = 0xffffff;
-        snprintf(right, sizeof right, "TOP %d KM/H", (int)lroundf(t.maxKmh()));
+        snprintf(right, sizeof right, "TOP %d %s", displaySpeed((int)lroundf(t.maxKmh()), s_units), s_units ? "MPH" : "KM/H");
     } else if (st == TS_NO_RESULT) {
         fmtSec(tnum, sizeof tnum, -1);
         snprintf(right, sizeof right, "UNDER 30 - NOT LOGGED");
@@ -369,7 +375,7 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
         drawBig(label, right, tag, "", 0, "");                 // label row only
         drawReady(((now / 400) & 1) == 0);
     } else {
-        drawBig(label, right, tag, num, kmh >= 0 ? 0xffffff : C_DIM, "KM/H");
+        drawBig(label, right, tag, num, kmh >= 0 ? 0xffffff : C_DIM, s_units ? "MPH" : "KM/H");
     }
     drawTime(tlabel, tnum, tColor);
 

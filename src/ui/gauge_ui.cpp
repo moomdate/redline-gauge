@@ -48,6 +48,7 @@ static const uint16_t *s_bg = nullptr;
 static PushFn    s_push = nullptr;
 static char      s_key[RG_COUNT][64];         // what each region last showed
 static int       s_pushed = 0;
+static uint8_t   s_units = 0;              // 0 = km/h, 1 = mph (speed readouts)
 static const LinkStatus *s_kl = nullptr;      // ECU link of the source, nullptr = none
 static uint32_t  s_klNow = 0;
 static int       s_pillX = 0;                  // left edge of the K-line pill, 0 = none
@@ -322,7 +323,7 @@ static void drawRpm(const GaugeView &v) {
 // ---- vehicle speed + gear ------------------------------------------------------------
 static void drawSpeed(const GaugeView &v) {
     char num[8], gear[4] = "";
-    if (v.speedValid) snprintf(num, sizeof num, "%03d", v.speed);
+    if (v.speedValid) snprintf(num, sizeof num, "%03d", displaySpeed(v.speed, s_units));
     else strcpy(num, "---");
     if (v.gear == 0) strcpy(gear, "N");
     else if (v.gear > 0) snprintf(gear, sizeof gear, "%d", v.gear);
@@ -346,7 +347,7 @@ static void drawSpeed(const GaugeView &v) {
 
     cv.text(font_label, 23, 203, "SPEED", C(s_theme->accentBright), ALIGN_LEFT, 1);
     int w = cv.text(font_speed, 68, 207, num, C(v.speedValid ? C_WHITE : C_DIM), ALIGN_LEFT, 0, true);
-    cv.text(font_small, 68 + w + 3, 207, "km/h", C(0xbac6cc));
+    cv.text(font_small, 68 + w + 3, 207, speedUnit(s_units), C(0xbac6cc));
     if (gear[0]) {
         cv.text(font_small, 147, 207, "GEAR", C(s_theme->warning));
         cv.text(font_speed, 178, 207, gear, C(s_theme->warning), ALIGN_CENTER);
@@ -567,6 +568,14 @@ Canvas &canvas() { return cv; }
 PushFn pushFn() { return s_push; }
 
 bool hitStatus(int x, int y) { return y < 26 && x < 215; }
+void setUnits(uint8_t units) {
+    uint8_t u = units ? 1 : 0;
+    if (u == s_units) return;
+    s_units = u;
+    s_key[RG_SPEED][0] = 1;      // force drawSpeed to repaint with the new unit
+    s_speedPrev[0] = 0;
+}
+
 void setPanelItems(const uint8_t items[3]) {
     for (int i = 0; i < 3; i++) s_items[i] = items[i] < PI_COUNT ? items[i] : PI_COOLANT;
 }

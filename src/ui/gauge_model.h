@@ -77,5 +77,9 @@ private:
 // Pure and unit-tested; `cand` / `candAt` are the debounce state.
 int trackGear(int held, int raw, float rpm, float speedKmh, int &cand, uint32_t &candAt, uint32_t now);
 
+// Speed shown in the chosen unit (data is always km/h internally). units: 0 = km/h, 1 = mph.
+inline int   displaySpeed(int kmh, uint8_t units) { return units ? (int)(kmh * 0.621371f + 0.5f) : kmh; }
+inline const char *speedUnit(uint8_t units) { return units ? "mph" : "km/h"; }
+
 // Estimate gear from rpm/speed using config.h ratios. 0 = no match (clutch/neutral).
 int estimateGear(float rpm, float speedKmh);

@@ -25,6 +25,17 @@ new features bump the middle number, fixes the last one.
   estimate for 150 ms so one stale sample doesn't flicker it. N only when stopped. `GEAR_HOLD 0` restores
   the old behaviour (N whenever nothing fits).
 
+## [Unreleased]
+
+### Added
+- **mph speed units** (SETUP -> OPTIONS -> tap the KM/H / MPH toggle, or `units=kmh|mph`): the main speed
+  gauge and the drag timer's live / top speed read in mph; data stays km/h internally. Default km/h.
+  (The drag-timer milestones 0-100 / 0-200 stay km/h for now.)
+
+### Changed
+- **SETTINGS page redesign**: the on/off options (BEEP, GEAR, UNITS, PANELS, K-UART, RESET PEAK) moved into
+  an OPTIONS zone of checkbox toggles, making room without crowding; themes, data source and shift RPM unchanged.
+
 ## [1.9.2] - 2026-11-04
 
 ### Added

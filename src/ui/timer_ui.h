@@ -11,6 +11,7 @@ enum Action : uint8_t { ACT_NONE, ACT_EXIT, ACT_ABORT, ACT_AGAIN, ACT_LOG, ACT_B
                         ACT_CANCEL, ACT_NEW_RUN };
 
 void   invalidate();                                  // full repaint next render()
+void   setUnits(uint8_t units);                       // 0 = km/h, 1 = mph (live + top speed)
 void   render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid);
 Action tapTimer(int x, int y, const DragTimer &t);
 

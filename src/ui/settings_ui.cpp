@@ -23,18 +23,20 @@ static const Rect R_DONE = { 250, 4, 64, 22 };
 static const Rect R_TIMER = { 178, 4, 66, 22 };   // drag timer screen
 static const Rect R_COLORS = { 102, 4, 72, 22 };  // flip panel colour inversion
 static Rect themeCard(int i)  { return { 8 + i * 104, 46, 96, 72 }; }
-static Rect sourceBtn(int i)  { return { 6 + i * 44, 152, 42, 22 }; }
-static const Rect R_SHIFT_DN = {   8, 194, 26, 22 };
-static const Rect R_SHIFT_V  = {  36, 194, 78, 22 };
-static const Rect R_SHIFT_UP = { 116, 194, 26, 22 };
-static const Rect R_BRI_DN   = { 168, 194, 26, 22 };
-static const Rect R_BRI_V    = { 196, 194, 78, 22 };
-static const Rect R_BRI_UP   = { 276, 194, 26, 22 };
-static const Rect R_BEEP     = {   8, 221, 58, 17 };
-static const Rect R_PEAK     = {  69, 221, 58, 17 };
-static const Rect R_PANELS   = { 130, 221, 58, 17 };
-static const Rect R_GEAR     = { 191, 221, 58, 17 };
-static const Rect R_KUART    = { 252, 221, 60, 17 };
+static Rect sourceBtn(int i)  { return { 6 + i * 44, 148, 42, 20 }; }
+static const Rect R_SHIFT_DN = {   8, 178, 24, 18 };
+static const Rect R_SHIFT_V  = {  34, 178, 70, 18 };
+static const Rect R_SHIFT_UP = { 106, 178, 24, 18 };
+static const Rect R_BRI_DN   = { 168, 178, 24, 18 };
+static const Rect R_BRI_V    = { 196, 178, 70, 18 };
+static const Rect R_BRI_UP   = { 268, 178, 24, 18 };
+// OPTIONS: a 3 x 2 grid of checkbox toggles
+static const Rect R_BEEP     = {   8, 204, 100, 16 };
+static const Rect R_GEAR     = { 112, 204,  98, 16 };
+static const Rect R_UNITS    = { 214, 204,  98, 16 };
+static const Rect R_PANELS   = {   8, 222, 100, 16 };
+static const Rect R_KUART    = { 112, 222,  98, 16 };
+static const Rect R_PEAK     = { 214, 222,  98, 16 };
 const char *const kPanelLabels[PANELS_COUNT] = { "PANEL AUTO", "PANEL STD", "PANEL HYB" };
 
 #define C_TEXT   0xd9e2e7
@@ -61,6 +63,26 @@ static void button(Canvas &cv, const Theme &t, const Rect &r, const char *label,
     if (on) cv.fillRect(r.x + 1, r.y + r.h - 3, r.w - 2, 2, C(t.accent));   // underline, like the web UI
     int base = r.y + (r.h + font.ascent) / 2 - (on ? 1 : 0);
     cv.text(font, r.x + r.w / 2, base, label, C(on ? t.accentBright : C_TEXT), ALIGN_CENTER, 1);
+}
+
+// A checkbox toggle: state 1 = on (filled box), 0 = off (empty box), -1 = action (no box).
+static void toggle(Canvas &cv, const Theme &t, const Rect &r, const char *label, int state) {
+    uint16_t edge = state == 1 ? C(t.accent) : C(C_EDGE);
+    uint16_t fill = state == 1 ? blend565(55, C(t.accent), C(C_BTN)) : C(C_BTN);
+    cv.fillRect(r.x, r.y, r.w, r.h, fill);
+    cv.fillRect(r.x, r.y, r.w, 1, edge);
+    cv.fillRect(r.x, r.y + r.h - 1, r.w, 1, edge);
+    cv.fillRect(r.x, r.y, 1, r.h, edge);
+    cv.fillRect(r.x + r.w - 1, r.y, 1, r.h, edge);
+    int tx = r.x + 7;
+    if (state >= 0) {
+        int bx = r.x + 6, by = r.y + (r.h - 10) / 2;
+        cv.fillRect(bx, by, 10, 10, C(C_EDGE));
+        cv.fillRect(bx + 1, by + 1, 8, 8, C(state ? 0 : C_BTN));   // on: dark base, then accent fill
+        if (state) cv.fillRect(bx + 2, by + 2, 6, 6, C(t.accent));
+        tx = r.x + 21;
+    }
+    cv.text(font_small, tx, r.y + (r.h + 7) / 2, label, C(state == 1 ? t.accentBright : C_TEXT), ALIGN_LEFT);
 }
 
 static void themeThumb(Canvas &cv, const Theme &cur, int i, bool selected) {
@@ -108,30 +130,32 @@ static void compose(Canvas &cv, const Settings &s) {
     cv.text(font_small, 12, 41, "THEME", C(C_MUTED), ALIGN_LEFT, 1);
     for (int i = 0; i < THEME_COUNT; i++) themeThumb(cv, t, i, i == s.theme);
 
-    cv.text(font_small, 12, 148, "DATA SOURCE", C(C_MUTED), ALIGN_LEFT, 1);
+    cv.text(font_small, 12, 142, "DATA SOURCE", C(C_MUTED), ALIGN_LEFT, 1);
     // the compact font keeps every label clear of the button edges
     for (int i = 0; i < SRC_COUNT; i++) button(cv, t, sourceBtn(i), kSourceLabels[i], i == s.source, font_small);
 
     char buf[16];
-    cv.text(font_small, 12, 190, "SHIFT LIGHT RPM", C(C_MUTED), ALIGN_LEFT, 1);
+    cv.text(font_small, 12, 174, "SHIFT RPM", C(C_MUTED), ALIGN_LEFT, 1);
     button(cv, t, R_SHIFT_DN, "-", false);
     snprintf(buf, sizeof buf, "%d,%03d", s.shiftRpm / 1000, s.shiftRpm % 1000);
     button(cv, t, R_SHIFT_V, buf, false);
     button(cv, t, R_SHIFT_UP, "+", false);
 
 #if BACKLIGHT_DIMMING                           // hidden: this CYD's backlight can't dim (config.h)
-    cv.text(font_small, 172, 190, "BRIGHTNESS", C(C_MUTED), ALIGN_LEFT, 1);
+    cv.text(font_small, 172, 174, "BRIGHTNESS", C(C_MUTED), ALIGN_LEFT, 1);
     button(cv, t, R_BRI_DN, "-", false);
     snprintf(buf, sizeof buf, "%d%%", s.brightness);
     button(cv, t, R_BRI_V, buf, false);
     button(cv, t, R_BRI_UP, "+", false);
 #endif
 
-    button(cv, t, R_BEEP, s.beep ? "BEEP ON" : "BEEP OFF", s.beep, font_small);
-    button(cv, t, R_PEAK, s_peakCleared ? "CLEARED" : "RESET PEAK", s_peakCleared, font_small);
-    button(cv, t, R_PANELS, kPanelLabels[s.panels < PANELS_COUNT ? s.panels : 0], s.panels != PANELS_AUTO, font_small);
-    button(cv, t, R_GEAR, s.gearMode == GEARMODE_OFF ? "GEAR OFF" : "GEAR AUTO", s.gearMode == GEARMODE_OFF, font_small);
-    button(cv, t, R_KUART, s.klineUart == 0 ? "K-UART 0" : "K-UART 2", s.klineUart == 0, font_small);
+    cv.text(font_small, 12, 200, "OPTIONS", C(C_MUTED), ALIGN_LEFT, 1);
+    toggle(cv, t, R_BEEP,  s.beep ? "BEEP ON" : "BEEP OFF", s.beep);
+    toggle(cv, t, R_GEAR,  s.gearMode == GEARMODE_OFF ? "GEAR OFF" : "GEAR ON", s.gearMode != GEARMODE_OFF);
+    toggle(cv, t, R_UNITS, s.units ? "MPH" : "KM/H", s.units);
+    toggle(cv, t, R_PANELS, kPanelLabels[s.panels < PANELS_COUNT ? s.panels : 0], s.panels != PANELS_AUTO);
+    toggle(cv, t, R_KUART, s.klineUart == 0 ? "K-UART 0" : "K-UART 2", s.klineUart == 0);
+    toggle(cv, t, R_PEAK,  s_peakCleared ? "CLEARED" : "RESET PEAK", -1);
 }
 
 void draw(const Settings &s) {
@@ -177,6 +201,7 @@ Action tap(int x, int y, Settings &s) {
     if (inside(R_PANELS, x, y)) { s.panels = (s.panels + 1) % PANELS_COUNT; a = ACT_CHANGED; }
     if (inside(R_GEAR, x, y)) { s.gearMode = (s.gearMode + 1) % GEARMODE_COUNT; a = ACT_CHANGED; }
     if (inside(R_KUART, x, y)) { s.klineUart = s.klineUart == 0 ? 2 : 0; a = ACT_CHANGED; }
+    if (inside(R_UNITS, x, y)) { s.units = s.units ? 0 : 1; a = ACT_CHANGED; }
     if (a == ACT_CHANGED || wasCleared) draw(s);
     return a;
 }
