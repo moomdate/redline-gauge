@@ -19,3 +19,8 @@ ASCII=$(printf '%s' ' !"#$%&'"'"'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUV
 "$PY" gen_font.py $F/Kanit-Black.ttf        50 font_timer "0123456789.-"            $O/font_timer.h
 "$PY" gen_font.py $F/Kanit-BlackItalic.ttf  48 font_ready "READY!GO"                $O/font_ready.h
 "$PY" gen_font.py $F/Kanit-BlackItalic.ttf  50 font_title "REDLIN"                  $O/font_title.h
+
+# Thai UI font (phase 2). Kanit covers the full Thai block; gen_font.py keeps the
+# combining marks at advance 0 so canvas.cpp stacks them over the base consonant.
+THAI="กขฃคฅฆงจฉชซฌญฎฏฐฑฒณดตถทธนบปผฝพฟภมยรฤลฦวศษสหฬอฮฯะัาำิีึืฺุู฿เแโใไๅๆ็่้๊๋์ํ๏๐๑๒๓๔๕๖๗๘๙"
+"$PY" gen_font.py $F/Kanit-SemiBold.ttf     18 font_th " ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.,:/%-°${THAI}" $O/font_th.h
