@@ -6,7 +6,7 @@ PY="${PY:-python3}"
 SRC=../../src
 rm -rf out && mkdir -p out
 c++ -std=c++17 -O2 -Wall -Wno-unused-function -I "$SRC" preview.cpp \
-    "$SRC/ui/canvas.cpp" "$SRC/ui/gauge_ui.cpp" "$SRC/ui/gauge_model.cpp" "$SRC/ui/settings_ui.cpp" "$SRC/ui/splash_ui.cpp" "$SRC/core/provenance.cpp" "$SRC/ui/theme.cpp" "$SRC/ui/drag_timer.cpp" "$SRC/ui/timer_ui.cpp" "$SRC/ui/link_ui.cpp" \
+    "$SRC/ui/canvas.cpp" "$SRC/ui/gauge_ui.cpp" "$SRC/ui/v2/data_wave_ui.cpp" "$SRC/ui/v2/race_code_ui.cpp" "$SRC/ui/gauge_model.cpp" "$SRC/ui/settings_ui.cpp" "$SRC/ui/splash_ui.cpp" "$SRC/core/provenance.cpp" "$SRC/ui/theme.cpp" "$SRC/ui/drag_timer.cpp" "$SRC/ui/timer_ui.cpp" "$SRC/ui/link_ui.cpp" \
     "$SRC/data/gauge_bus.cpp" "$SRC/data/sim_source.cpp" -o out/preview
 ./out/preview
 "$PY" - <<'PYEOF'

@@ -43,6 +43,9 @@ private:
     bool     o2On_ = true;             // false once the ECU proved it has no table 0x20
     uint8_t  o2Miss_ = 0;
     uint32_t lastO2_ = 0;
+    uint16_t lastRpm_ = 0;             // from the last main-table reply, to gate the AFR estimate
+    float    o2Min_ = 1, o2Max_ = 0;   // O2 swing over a window: tells closed loop from open loop
+    uint32_t o2WinAt_ = 0;
     uint8_t  resp_[64];
     uint8_t  respLen_ = 0;
 

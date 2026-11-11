@@ -205,6 +205,7 @@ void HondaKSource::poll() {
         hkTableRequest(HK_TABLE, req);
         HondaData d;
         if (transact(req, 5, 300) && hkDecodeMain(resp_, respLen_, d)) {
+            lastRpm_ = d.rpm;                             // remembered so pollO2() can gate the AFR
             bus::publish(CH_RPM, d.rpm);
             bus::publish(CH_THROTTLE, d.tps);
             bus::publish(CH_COOLANT, d.temp);
@@ -235,14 +236,27 @@ void HondaKSource::pollO2() {
     hkTableRequest(HK_TABLE_O2, req);
     delay(20);                                         // gap between messages
     if (transact(req, 5, 150) && hkDecodeO2(resp_, respLen_, raw)) {
-        float volts = hkO2Volts(raw), afr = hkAfrFromO2(volts);
-        bus::publish(CH_AFR, afr);
-        bus::publish(CH_O2_MV, volts * 1000.0f);
+        float volts = hkO2Volts(raw);
+        bus::publish(CH_O2_MV, volts * 1000.0f);         // raw sensor volts: always valid to show
         o2Miss_ = 0;
         s_link.reply();
         s_o2Volts = volts;
-        s_afr = afr;
         s_hasO2 = true;
+
+        // Track the O2 swing over ~4 s. A narrowband sensor only means anything while it is
+        // switching about 0.45 V (closed loop); pegged = open loop (cold engine or full throttle).
+        if (millis() - o2WinAt_ > 4000) { o2WinAt_ = millis(); o2Min_ = o2Max_ = volts; }
+        if (volts < o2Min_) o2Min_ = volts;
+        if (volts > o2Max_) o2Max_ = volts;
+        bool switching = (o2Max_ - o2Min_) >= 0.08f;
+
+        // Publish AFR only when it is meaningful: above idle and while the sensor is switching.
+        // Otherwise leave CH_AFR to go stale so the panel shows "--", not a wrong number.
+        if (lastRpm_ >= 500 && switching) {
+            float afr = hkAfrFromO2(volts);
+            bus::publish(CH_AFR, afr);
+            s_afr = afr;
+        }
     } else if (++o2Miss_ >= 3) {
         if (!s_hasO2) {
             o2On_ = false;

@@ -16,6 +16,10 @@
 #include "ui/link_ui.h"
 #include "data/link_status.h"
 #include "config.h"
+#include "ui/i18n.h"
+#include "ui/v2/data_wave_ui.h"
+#include "ui/v2/race_code_ui.h"
+#include <math.h>
 
 extern uint32_t g_host_ms;
 static uint16_t fb[320 * 240];
@@ -119,8 +123,68 @@ static void timerFrames() {
     timer_ui::tapLog(238, 224);                          // CANCEL
 }
 
+static void dataWaveFrame() {
+    data_wave_ui::begin(push, kThemes[THEME_ICE]);
+    { const uint8_t it[3] = { PI_THROTTLE, PI_AFR, PI_COOLANT }; gauge_ui::setPanelItems(it); }
+    GaugeView v{};
+    v.tripKm = 128.4f;
+    v.rpmValid = v.speedValid = v.tpsValid = v.afrValid = v.coolValid = true;
+    v.gear = 4; v.speed = 138; v.mode = "SIM AUTO";
+    for (int i = 0; i < 320; i++) {
+        float t = i * 0.16f;
+        v.rpmBar = 6200 + 2000 * sinf(t);          v.rpmText = (int)v.rpmBar;
+        v.tps    = (int)(50 + 45 * sinf(t * 1.3f));
+        v.afr    = 13.8f + 1.4f * sinf(t * 0.9f + 1);
+        v.coolant = 88 + (int)(3 * sinf(t * 0.3f));
+        data_wave_ui::render(v);
+    }
+    save("out/datawave.ppm");
+}
+
+static void raceCodeFrame() {
+    race_code_ui::begin(push, kThemes[THEME_ICE]);
+    { const uint8_t it[3] = { PI_COOLANT, PI_INTAKE, PI_VOLTAGE }; gauge_ui::setPanelItems(it); }
+    GaugeView v{};
+    v.rpmValid = v.speedValid = v.coolValid = v.voltValid = v.iatValid = true;
+    v.iat = 38; v.tripKm = 128.4f;
+    v.gear = 4; v.speed = 138; v.mode = "SIM AUTO"; v.coolant = 92; v.volt = 14.2f;
+    const int rpms[] = { 9500, 0, 3000, 6720 };          // sweep up, drop, climb: exercises both directions
+    for (int k = 0; k < 4; k++)
+        for (int i = 0; i < 12; i++) { v.rpmBar = (float)rpms[k]; v.rpmText = rpms[k]; race_code_ui::render(v); }
+    save("out/racecode.ppm");
+    v.rpmBar = 2100; v.rpmText = 2100; v.gear = 2; v.speed = 42;
+    for (int i = 0; i < 12; i++) race_code_ui::render(v);
+    save("out/racecode_low.ppm");
+    { const uint8_t it[3] = { PI_MAP, PI_FUEL_RATE, PI_THROTTLE }; gauge_ui::setPanelItems(it); }
+    v.mapValid = v.fuelRateValid = v.tpsValid = true; v.map = 98; v.fuelRate = 12.3f; v.tps = 64;
+    for (int i = 0; i < 4; i++) race_code_ui::render(v);
+    save("out/racecode_car.ppm");
+    { const uint8_t it[3] = { PI_COOLANT, PI_INTAKE, PI_VOLTAGE }; gauge_ui::setPanelItems(it); }
+    v.coolant = 105; v.volt = 12.6f; v.iatValid = false;
+    i18n::set(1); race_code_ui::invalidate();
+    for (int i = 0; i < 4; i++) race_code_ui::render(v);
+    save("out/racecode_th.ppm");
+    i18n::set(0);
+    {   // every item's icon, three tiles at a time
+        GaugeView w = v;
+        w.tpsValid = w.afrValid = w.mapValid = w.fuelLevelValid = w.fuelRateValid = w.loadValid = true;
+        w.ignitionValid = w.o2MvValid = w.stftValid = w.coolValid = w.voltValid = w.iatValid = true;
+        w.tps = 64; w.afr = 14.1f; w.map = 98; w.fuelLevel = 72; w.fuelRate = 12.3f; w.load = 45;
+        w.ignition = 18.5f; w.o2Mv = 640; w.stft = -2.3f; w.iat = 38; w.coolant = 92;
+        const uint8_t sets[3][3] = { { PI_THROTTLE, PI_AFR, PI_MAP }, { PI_FUEL_LEVEL, PI_FUEL_RATE, PI_LOAD },
+                                     { PI_IGNITION, PI_O2_MV, PI_STFT } };
+        for (int k = 0; k < 3; k++) {
+            gauge_ui::setPanelItems(sets[k]);
+            for (int i = 0; i < 3; i++) race_code_ui::render(w);
+            char p[48]; snprintf(p, sizeof p, "out/racecode_icons%d.ppm", k); save(p);
+        }
+    }
+}
+
 int main() {
     gauge_ui::begin(push, kThemes[THEME_ICE]);
+    dataWaveFrame();
+    raceCodeFrame();
     for (int t = 0; t < THEME_COUNT; t++) {
         char p[64];
         splash_ui::draw(push, kThemes[t]);
@@ -145,6 +209,26 @@ int main() {
     gauge_ui::setTheme(kThemes[THEME_LIME]);
     staticFrame("out/shift.ppm", 7250, 142, 106, 11.6f, 72, 4, Link::Simulated, "", "SIM AUTO");
     gauge_ui::setUnits(1); staticFrame("out/speed_mph.ppm", 4200, 113, 92, 13.8f, 40, 3, Link::Live, "", "OBD BT"); gauge_ui::setUnits(0);
+    i18n::set(1); staticFrame("out/gauge_th.ppm", 5600, 86, 92, 13.9f, 40, 3, Link::Live, "", "OBD BT");
+    { Settings rc; rc.theme = THEME_ICE; rc.skin = SKIN_RACE_CODE; settings_ui::openMain(); settings_ui::draw(rc); save("out/settings_racecode.ppm"); }
+    { Settings th; th.theme = THEME_ICE; th.lang = 1; settings_ui::openMain(); settings_ui::draw(th); save("out/settings_th.ppm");
+      settings_ui::tap(280, 208, th);        // tap ALERT -> opens the alert sub-page (draws it)
+      save("out/alertpage_th.ppm"); settings_ui::openMain();
+      settings_ui::tap(100, 60, th);         // tap the THEME chip -> theme page
+      save("out/themepage_th.ppm"); settings_ui::openMain(); }
+    { Settings h; h.theme = THEME_ICE; h.lang = 1; h.source = SRC_HONDA; settings_ui::openMain();
+      settings_ui::draw(h); save("out/settings_honda_th.ppm");   // main page: shows the MODEL chip
+      settings_ui::tap(213, 106, h);         // tap the MODEL chip -> model page
+      save("out/hondapage_th.ppm"); settings_ui::openMain(); }
+    // Thai panels incl. the technical ones (throttle, AFR, MAP) to check label fit.
+    { const uint8_t it[3] = { PI_THROTTLE, PI_AFR, PI_MAP }; gauge_ui::setPanelItems(it);
+      g_afr = 14.6f; g_tps = 37;
+      staticFrame("out/gauge_th_panels.ppm", 3100, 64, 92, 13.9f, 40, 3, Link::Live, "", "OBD BT");
+      g_afr = -1; g_tps = -1;
+      const uint8_t def[3] = { PI_COOLANT, PI_VOLTAGE, PI_INTAKE }; gauge_ui::setPanelItems(def); }
+    // Critical-alert banner: coolant 112 C (overheat) + 11.4 V (low battery).
+    staticFrame("out/gauge_alert_th.ppm", 5200, 120, 112, 11.4f, 40, 4, Link::Live, "", "OBD BT");
+    i18n::set(0);
     staticFrame("out/cold.ppm", 1150, 0, 45, 12.2f, 30, 0, Link::Live, "", "SERIAL");
     gauge_ui::setTheme(kThemes[THEME_AMBER]);
     gauge_ui::setTheme(kThemes[THEME_ICE]);

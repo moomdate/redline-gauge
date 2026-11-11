@@ -19,6 +19,7 @@ extern const char *const kSourceLabels[SRC_COUNT];
 extern const char *const kPanelLabels[PANELS_COUNT];
 
 void   draw(const Settings &s);                 // full repaint (open / after a change)
+void   openMain();                              // reset to the main page (call when (re)opening)
 Action tap(int x, int y, Settings &s);          // handle a tap; edits s, repaints if needed
 
 }

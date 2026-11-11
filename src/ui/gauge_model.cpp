@@ -112,6 +112,8 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
     v.speed = (int)(speedSmooth_ + 0.5f);
     if (v.speed > 999) v.speed = 999;
     if (v.speed < 0) v.speed = 0;
+    if (v.speedValid && dt < 1000.0f) tripKm_ += spd * dt / 3600000.0f;   // dt in ms
+    v.tripKm = tripKm_;
 
     if (gearOff_) v.gear = -1;
     else if (fresh(s, CH_GEAR, now)) v.gear = (int)(s.value[CH_GEAR] + 0.5f);
@@ -123,18 +125,18 @@ void GaugeModel::update(const GaugeSnapshot &s, uint32_t now, const char *modeNa
     // ---- side panels -------------------------------------------------------------
     v.coolValid = fresh(s, CH_COOLANT, now);
     v.coolant = (int)lroundf(s.value[CH_COOLANT]);
-    v.coolLvl = v.coolant >= COOLANT_CRIT ? LV_CRIT
+    v.coolLvl = v.coolant >= coolCrit_    ? LV_CRIT
               : v.coolant >= COOLANT_WARN ? LV_WARN
               : v.coolant < COOLANT_COLD  ? LV_COLD : LV_NORMAL;
 
     v.voltValid = fresh(s, CH_VOLTAGE, now);
     v.volt = s.value[CH_VOLTAGE];
-    v.voltLvl = (v.volt < VOLT_LOW_CRIT || v.volt > VOLT_HIGH_CRIT) ? LV_CRIT
+    v.voltLvl = (v.volt < voltLoCrit_ || v.volt > VOLT_HIGH_CRIT) ? LV_CRIT
               : (v.volt < VOLT_LOW_WARN || v.volt > VOLT_HIGH_WARN) ? LV_WARN : LV_NORMAL;
 
     v.iatValid = fresh(s, CH_IAT, now);
     v.iat = (int)lroundf(s.value[CH_IAT]);
-    v.iatLvl = v.iat >= IAT_CRIT ? LV_CRIT : v.iat >= IAT_WARN ? LV_WARN : LV_NORMAL;
+    v.iatLvl = v.iat >= iatCrit_ ? LV_CRIT : v.iat >= IAT_WARN ? LV_WARN : LV_NORMAL;
 
     // AFR from a narrowband O2 sensor flips rich/lean about once a second: show the average.
     v.afrValid = fresh(s, CH_AFR, now);

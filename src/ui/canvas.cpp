@@ -27,6 +27,13 @@ bool Canvas::begin(int x, int y, int rw, int rh, const uint16_t *bg) {
     return true;
 }
 
+bool Canvas::beginSolid(int x, int y, int rw, int rh, uint16_t color) {
+    if (rw <= 0 || rh <= 0 || rw * rh > cap_) return false;
+    x0 = x; y0 = y; w = rw; h = rh;
+    for (int i = 0; i < rw * rh; i++) px[i] = color;
+    return true;
+}
+
 void Canvas::pixel(int x, int y, uint16_t c) {
     x -= x0; y -= y0;
     if ((unsigned)x < (unsigned)w && (unsigned)y < (unsigned)h) px[y * w + x] = c;

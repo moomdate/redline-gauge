@@ -9,6 +9,7 @@
 #include "fonts/font_value.h"
 #include "fonts/font_label.h"
 #include "fonts/font_small.h"
+#include "ui/i18n.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
@@ -49,6 +50,8 @@ static PushFn    s_push = nullptr;
 static char      s_key[RG_COUNT][64];         // what each region last showed
 static int       s_pushed = 0;
 static uint8_t   s_units = 0;              // 0 = km/h, 1 = mph (speed readouts)
+static bool      s_alerts = true;          // show the flashing critical-warning banner
+static bool      s_tempOil = false;        // temp panel: true = "OIL TEMP" (air-cooled), false = "COOLANT"
 static const LinkStatus *s_kl = nullptr;      // ECU link of the source, nullptr = none
 static uint32_t  s_klNow = 0;
 static int       s_pillX = 0;                  // left edge of the K-line pill, 0 = none
@@ -145,16 +148,45 @@ static void drawPillIcon(int icon, float cx, float cy, uint16_t c) {
     }
 }
 
+// The most urgent critical conditions, joined into one banner string ("" = none).
+// Overheat first (most damaging), then battery, then intake-air temperature.
+static const char *activeAlert(const GaugeView &v) {
+    if (!s_alerts) return "";
+    static char msg[72];
+    msg[0] = 0;
+    auto add = [&](const char *s) {
+        if (msg[0]) strncat(msg, "  ", sizeof msg - strlen(msg) - 1);
+        strncat(msg, s, sizeof msg - strlen(msg) - 1);
+    };
+    if (v.coolValid && v.coolLvl == LV_CRIT) add(i18n::T("OVERHEAT", "ความร้อนเกิน"));
+    if (v.voltValid && v.voltLvl == LV_CRIT)   // < ~13.5 V = flat battery, else charging over-voltage
+        add(v.volt < 13.5f ? i18n::T("LOW BATTERY", "แบตอ่อน")
+                           : i18n::T("OVER VOLT", "ไฟเกิน"));
+    if (v.iatValid && v.iatLvl == LV_CRIT) add(i18n::T("INTAKE HOT", "ไอดีร้อน"));
+    return msg;
+}
+
 static void drawStatus(const GaugeView &v) {
-    char key[64];
+    char key[96];
+    const char *alert = activeAlert(v);
     uint32_t dot = v.link == Link::Live      ? s_theme->good
                  : v.link == Link::Simulated ? s_theme->accentBright : v.dotColor;
     bool official = splash_ui::authentic();
     Pill pill = {};
     if (s_kl) pill = linkPill(*s_kl, s_klNow, ((s_klNow / 350) & 1) == 0);
-    snprintf(key, sizeof key, "%s|%s|%06x|%d|%d|%s|%d|%06x", v.mode, s_kl ? "" : v.right, (unsigned)dot,
+    snprintf(key, sizeof key, "%s|%d|%s|%s|%06x|%d|%d|%s|%d|%06x", alert, v.blink,
+             v.mode, s_kl ? "" : v.right, (unsigned)dot,
              v.dotOn, official, pill.text, pill.icon, (unsigned)pill.color);
     if (!changed(RG_STATUS, key) || !beginRegion(R_STATUS)) return;
+
+    // A critical condition overrides the whole strip with a flashing red banner.
+    if (alert[0]) {
+        if (v.blink) cv.fillRect(R_STATUS.x, R_STATUS.y, R_STATUS.w, R_STATUS.h, C(C_CRIT));
+        cv.fillRect(R_STATUS.x + 4, R_STATUS.y + 4, 7, 7, C(v.blink ? 0xffffff : C_CRIT));  // marker
+        cv.text(i18n::font(font_small), R_STATUS.x + 16, 19, alert, C(v.blink ? 0xffffff : C_CRIT), ALIGN_LEFT);
+        flush();
+        return;
+    }
 
     if (v.dotOn && !s_kl) cv.fillCircle(21.5f, 15.5f, 2.3f, C(dot));
     if (official) cv.text(font_small, 28, 19, STATUS_TITLE, C(C_STATUS));
@@ -288,7 +320,7 @@ static void drawRpm(const GaugeView &v) {
 
     // both rows are painted by the same code, clipped to their own region
     auto paint = [&]() {
-        cv.text(font_small, 19, 75, "ENGINE SPEED", C(C_LABEL), ALIGN_LEFT, 1);
+        cv.text(i18n::font(font_small), 19, 75, i18n::T("ENGINE SPEED", "รอบเครื่อง"), C(C_LABEL), ALIGN_LEFT, 1);
         if (peak[0]) cv.text(font_small, 206, 75, peak, C(offline ? C_CRIT : 0x6f808b), ALIGN_RIGHT);
         int w = cv.text(font_rpm, 18, 118, num, C(color), ALIGN_LEFT, 0, true);
         cv.text(font_small, 18 + w + 8, 118, "RPM", C(s_theme->accentBright), ALIGN_LEFT, 1);
@@ -345,6 +377,8 @@ static void drawSpeed(const GaugeView &v) {
     snprintf(s_speedPrev, sizeof s_speedPrev, "%s", v.speedValid ? num : "");
     if (!beginColumns(R_SPEED, x0, x1)) return;
 
+    // This bottom strip is packed (label + number + unit + gear) into 174px; Thai words are
+    // too wide to fit without colliding, so these two micro-tags stay English in both languages.
     cv.text(font_label, 23, 203, "SPEED", C(s_theme->accentBright), ALIGN_LEFT, 1);
     int w = cv.text(font_speed, 68, 207, num, C(v.speedValid ? C_WHITE : C_DIM), ALIGN_LEFT, 0, true);
     cv.text(font_small, 68 + w + 3, 207, speedUnit(s_units), C(0xbac6cc));
@@ -356,6 +390,28 @@ static void drawSpeed(const GaugeView &v) {
 }
 
 // ---- side panels -----------------------------------------------------------------------
+// Thai names for every selectable panel. All fit the ~85px label slot at font_th_small (12px).
+static const char *panelLabel(const char *en) {
+    if (!i18n::lang) return en;
+    if (!strcmp(en, "COOLANT"))   return "หล่อเย็น";
+    if (!strcmp(en, "OIL TEMP"))  return "อุณหภูมิน้ำมัน";
+    if (!strcmp(en, "VOLTAGE"))   return "แรงดัน";
+    if (!strcmp(en, "INTAKE"))    return "ไอดี";
+    if (!strcmp(en, "THROTTLE"))  return "คันเร่ง";
+    if (!strcmp(en, "FUEL"))      return "น้ำมัน";
+    if (!strcmp(en, "LOAD"))      return "โหลด";
+    if (!strcmp(en, "AFR"))       return "ส่วนผสม";
+    if (!strcmp(en, "FUEL RATE")) return "สิ้นเปลือง";
+    if (!strcmp(en, "STFT"))      return "ชดเชยสั้น";
+    if (!strcmp(en, "LTFT"))      return "ชดเชยยาว";
+    if (!strcmp(en, "MAP"))       return "ความดันไอดี";
+    if (!strcmp(en, "IGN ADV"))   return "องศาไฟ";
+    if (!strcmp(en, "O2 SENSOR")) return "ออกซิเจน";
+    if (!strcmp(en, "HV BATT"))   return "แบตไฮบริด";
+    if (!strcmp(en, "HV POWER"))  return "กำลังไฟฟ้า";
+    return en;
+}
+
 static void drawPanel(int i, const char *label, bool valid, const char *value, const char *unit,
                       uint32_t color, float frac) {
     int top = PANEL_TOP[i];
@@ -365,7 +421,7 @@ static void drawPanel(int i, const char *label, bool valid, const char *value, c
     snprintf(key, sizeof key, "%s|%d|%s|%06x|%d", label, valid, value, (unsigned)color, fill);
     if (!changed(RG_P0 + i, key) || !beginRegion(panelRect(i))) return;
 
-    cv.text(font_label, 230, top + 8, label, C(s_theme->accentBright), ALIGN_LEFT, 1);
+    cv.text(i18n::font(font_label), 230, top + 8, panelLabel(label), C(s_theme->accentBright), ALIGN_LEFT, 1);
     int w = cv.text(font_value, 230, top + 29, valid ? value : "--", C(valid ? color : C_DIM),
                     ALIGN_LEFT, 0, true);
     cv.text(font_small, 230 + w + 3, top + 29, unit, C(0xd1d9de));
@@ -407,7 +463,7 @@ static void drawSetup() {
     cv.fillRect(r.x, r.y, 1, r.h, shade565(a, -0.3f));
     cv.fillRect(r.x + r.w - 1, r.y, 1, r.h, shade565(a, -0.3f));
     drawCog(r.x + 10, r.y + 8.5f, C(s_theme->accentBright));
-    cv.text(font_small, r.x + 20, r.y + 12, "SETUP", C(C_STATUS));
+    cv.text(i18n::font(font_small), r.x + 20, r.y + 12, i18n::T("SETUP", "ตั้งค่า"), C(C_STATUS));
     flush();
 }
 
@@ -494,7 +550,7 @@ static void drawItem(int i, uint8_t item, const GaugeView &v) {
         break;
     default:
         snprintf(buf, sizeof buf, "%d", v.coolant);
-        drawPanel(i, PANEL1_LABEL, v.coolValid, buf, "°C", levelColor(v.coolLvl, C_VALUE, v.blink),
+        drawPanel(i, s_tempOil ? "OIL TEMP" : PANEL1_LABEL, v.coolValid, buf, "°C", levelColor(v.coolLvl, C_VALUE, v.blink),
                   (v.coolant - COOLANT_BAR_MIN) / (float)(COOLANT_BAR_MAX - COOLANT_BAR_MIN));
         break;
     }
@@ -576,6 +632,18 @@ void setUnits(uint8_t units) {
     s_speedPrev[0] = 0;
 }
 
+void setAlertsEnabled(bool on) {
+    if (on == s_alerts) return;
+    s_alerts = on;
+    s_key[RG_STATUS][0] = 1;     // force the status strip to repaint (show/hide the banner)
+}
+
+void setTempIsOil(bool oil) {
+    if (oil == s_tempOil) return;
+    s_tempOil = oil;
+    for (int i = RG_P0; i <= RG_P2; i++) s_key[i][0] = 1;   // repaint panels with the new temp label
+}
+
 void setPanelItems(const uint8_t items[3]) {
     for (int i = 0; i < 3; i++) s_items[i] = items[i] < PI_COUNT ? items[i] : PI_COOLANT;
 }
@@ -602,6 +670,52 @@ uint8_t nextPanelItem(int i, const GaugeView &v, uint32_t avail) {
         if (!shown && (!any || ok(c))) return c;
     }
     return s_items[i];
+}
+
+uint8_t panelItem(int i) { return s_items[i < 0 ? 0 : i > 2 ? 2 : i]; }
+
+const char *itemLabel(const char *en) { return panelLabel(en); }
+
+// Thai names short enough for the RACE CODE tiles (~40 px at font_th_small).
+const char *itemShortLabel(const char *en) {
+    if (!i18n::lang) return en;
+    if (!strcmp(en, "ECT"))  return "หล่อเย็น";
+    if (!strcmp(en, "OIL"))  return "น้ำมันเครื่อง";
+    if (!strcmp(en, "IAT"))  return "ไอดี";
+    if (!strcmp(en, "BAT"))  return "แบต";
+    if (!strcmp(en, "TPS"))  return "คันเร่ง";
+    if (!strcmp(en, "LOAD")) return "โหลด";
+    if (!strcmp(en, "FUEL")) return "น้ำมัน";
+    if (!strcmp(en, "RATE")) return "สิ้นเปลือง";
+    if (!strcmp(en, "IGN"))  return "องศาไฟ";
+    return en;                                     // AFR, MAP, STFT, LTFT, O2: same in Thai
+}
+
+void itemInfo(uint8_t item, const GaugeView &v, ItemInfo &o) {
+    char *b = o.value; const size_t n = sizeof o.value;
+    o.icon = ICON_NONE; o.unit = ""; o.valid = itemValid(item, v);
+    switch (item) {
+    case PI_VOLTAGE:    o.label = PANEL2_LABEL; o.shortLabel = "BAT"; o.widest = "18.8";  snprintf(b, n, "%.1f", v.volt); o.unit = "V"; o.icon = ICON_BATT;
+                        o.frac = (v.volt - VOLT_BAR_MIN) / (VOLT_BAR_MAX - VOLT_BAR_MIN); break;
+    case PI_LOAD:       o.label = "LOAD"; o.shortLabel = "LOAD"; o.widest = "100"; o.icon = ICON_LOAD;  snprintf(b, n, "%d", v.load); o.unit = "%"; o.frac = v.load / 100.0f; break;
+    case PI_INTAKE:     o.label = "INTAKE"; o.shortLabel = "IAT"; o.widest = "188"; snprintf(b, n, "%d", v.iat); o.unit = "°C"; o.icon = ICON_THERM;
+                        o.frac = (v.iat - IAT_BAR_MIN) / (float)(IAT_BAR_MAX - IAT_BAR_MIN); break;
+    case PI_AFR:        o.label = "AFR"; o.shortLabel = "AFR"; o.widest = "28.8"; o.icon = ICON_AFR;   snprintf(b, n, "%.1f", v.afr);
+                        o.frac = (v.afr - AFR_BAR_MIN) / (AFR_BAR_MAX - AFR_BAR_MIN); break;
+    case PI_THROTTLE:   o.label = "THROTTLE"; o.shortLabel = "TPS"; o.widest = "100"; o.icon = ICON_TPS; snprintf(b, n, "%d", v.tps); o.unit = "%"; o.frac = v.tps / 100.0f; break;
+    case PI_FUEL_LEVEL: o.label = "FUEL"; o.shortLabel = "FUEL"; o.widest = "100"; o.icon = ICON_FUEL;  snprintf(b, n, "%d", v.fuelLevel); o.unit = "%"; o.frac = v.fuelLevel / 100.0f; break;
+    case PI_FUEL_RATE:  o.label = "FUEL RATE"; o.shortLabel = "RATE"; o.widest = "88.8"; o.icon = ICON_RATE; snprintf(b, n, "%.1f", v.fuelRate); o.unit = "L/h"; o.frac = v.fuelRate / 100.0f; break;
+    case PI_STFT:       o.label = "STFT"; o.shortLabel = "STFT"; o.widest = "-28.8"; o.icon = ICON_TRIM;  snprintf(b, n, "%.1f", v.stft); o.unit = "%"; o.frac = (v.stft + 25.0f) / 50.0f; break;
+    case PI_LTFT:       o.label = "LTFT"; o.shortLabel = "LTFT"; o.widest = "-28.8"; o.icon = ICON_TRIM;  snprintf(b, n, "%.1f", v.ltft); o.unit = "%"; o.frac = (v.ltft + 25.0f) / 50.0f; break;
+    case PI_MAP:        o.label = "MAP"; o.shortLabel = "MAP"; o.widest = "255"; o.icon = ICON_MAP;   snprintf(b, n, "%d", v.map); o.unit = "kPa"; o.frac = v.map / 255.0f; break;
+    case PI_IGNITION:   o.label = "IGN ADV"; o.shortLabel = "IGN"; o.widest = "-28.8"; o.icon = ICON_IGN; snprintf(b, n, "%.1f", v.ignition); o.unit = "°"; o.frac = v.ignition / 64.0f; break;
+    case PI_O2_MV:      o.label = "O2 SENSOR"; o.shortLabel = "O2"; o.widest = "1888"; o.icon = ICON_O2; snprintf(b, n, "%d", v.o2Mv); o.unit = "mV"; o.frac = v.o2Mv / 1000.0f; break;
+    default:            o.label = s_tempOil ? "OIL TEMP" : PANEL1_LABEL; o.shortLabel = s_tempOil ? "OIL" : "ECT"; o.widest = "188"; snprintf(b, n, "%d", v.coolant); o.unit = "°C";
+                        o.icon = s_tempOil ? ICON_OIL : ICON_THERM;
+                        o.frac = (v.coolant - COOLANT_BAR_MIN) / (float)(COOLANT_BAR_MAX - COOLANT_BAR_MIN); break;
+    }
+    if (!o.valid) { snprintf(b, n, "--"); o.frac = 0; }
+    if (o.frac < 0) o.frac = 0; else if (o.frac > 1) o.frac = 1;
 }
 
 bool hitLink(int x, int y)   { return s_pillX && y < 30 && x >= s_pillX - 8 && x < 218; }

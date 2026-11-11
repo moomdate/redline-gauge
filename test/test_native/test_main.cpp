@@ -1242,59 +1242,105 @@ static void test_partial_redraw_matches_full_redraw() {
 static void test_settings_taps() {
     gauge_ui::begin(push, kThemes[0]);
     Settings s;
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(260, 80, s));   // 3rd theme card
+    // THEME is now a chip that opens a sub-page of cards (no live preview).
+    settings_ui::openMain();
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(240, 60, s));      // THEME chip -> theme page (DEFAULT skin)
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(160, 186, s));  // 3rd theme card (AMBER)
     TEST_ASSERT_EQUAL_UINT8(2, s.theme);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(260, 80, s));      // same again: no-op
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(203, 163, s));  // CUSTOM source
-    TEST_ASSERT_EQUAL_UINT8(SRC_CUSTOM, s.source);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(247, 163, s));  // HONDA source
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(282, 15, s));      // BACK -> main
+    // Other skins have fixed artwork: the THEME chip does not open, a tap stays on the main page.
+    s.skin = SKIN_RACE_CODE;
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(240, 60, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(282, 14, s));     // still main: DONE closes
+    s.skin = SKIN_DEFAULT;
+    settings_ui::openMain();
+    // DATA SOURCE: TOUCH and CUSTOM are hidden; shown order SIM, SERIAL, OBD BT, HONDA.
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(71, 106, s));   // SERIAL source
+    TEST_ASSERT_EQUAL_UINT8(SRC_SERIAL, s.source);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(213, 106, s));     // no model chip when not HONDA
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(159, 106, s));  // HONDA source
     TEST_ASSERT_EQUAL_UINT8(SRC_HONDA, s.source);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(300, 163, s));     // no 7th source (H TEST gone)
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(280, 14, s));     // DONE
-    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(263, 230, s));
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(58, 230, s));  // PANELS cycles
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CLOSE, settings_ui::tap(282, 14, s));     // DONE
+    TEST_ASSERT_EQUAL(settings_ui::ACT_RESET_PEAK, settings_ui::tap(211, 208, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(54, 208, s));   // PANELS cycles
     TEST_ASSERT_EQUAL_UINT8(PANELS_STANDARD, s.panels);
-    settings_ui::tap(58, 230, s);
+    settings_ui::tap(54, 208, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_HYBRID, s.panels);
-    settings_ui::tap(58, 230, s);
+    settings_ui::tap(54, 208, s);
     TEST_ASSERT_EQUAL_UINT8(PANELS_AUTO, s.panels);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(161, 212, s));  // GEAR
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(118, 190, s));  // GEAR
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_OFF, s.gearMode);
-    settings_ui::tap(161, 212, s);
+    settings_ui::tap(118, 190, s);
     TEST_ASSERT_EQUAL_UINT8(GEARMODE_AUTO, s.gearMode);
     TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(161, 230, s));  // K-UART toggles
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(138, 208, s));  // K-UART toggles
     TEST_ASSERT_EQUAL_UINT8(0, s.klineUart);
-    settings_ui::tap(161, 230, s);
+    settings_ui::tap(138, 208, s);
     TEST_ASSERT_EQUAL_UINT8(2, s.klineUart);
     TEST_ASSERT_EQUAL_UINT8(0, s.units);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(263, 212, s));  // UNITS km/h <-> mph
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(193, 190, s));  // UNITS km/h <-> mph
     TEST_ASSERT_EQUAL_UINT8(1, s.units);
-    settings_ui::tap(263, 212, s);
+    settings_ui::tap(193, 190, s);
     TEST_ASSERT_EQUAL_UINT8(0, s.units);
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(160, 139, s));     // between theme names and sources
+    TEST_ASSERT_EQUAL_UINT8(0, s.lang);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(272, 190, s));  // LANG EN <-> TH
+    TEST_ASSERT_EQUAL_UINT8(1, s.lang);
+    settings_ui::tap(272, 190, s);
+    TEST_ASSERT_EQUAL_UINT8(0, s.lang);
+    // ALERT opens a sub-page (sub-page coords are absolute, unchanged by the main-page reflow).
+    TEST_ASSERT_TRUE(s.alerts);                                                  // default on
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(280, 208, s));     // tap ALERT -> opens page
+    TEST_ASSERT_EQUAL(settings_ui::ACT_CHANGED, settings_ui::tap(60, 54, s));    // master toggle off
+    TEST_ASSERT_FALSE(s.alerts);
+    settings_ui::tap(60, 54, s);
+    TEST_ASSERT_TRUE(s.alerts);
+    TEST_ASSERT_EQUAL_UINT8(COOLANT_CRIT, s.alertCoolant);
+    settings_ui::tap(277, 84, s);                                                // overheat +
+    TEST_ASSERT_EQUAL_UINT8(COOLANT_CRIT + 1, s.alertCoolant);
+    settings_ui::tap(163, 84, s);                                                // overheat -
+    TEST_ASSERT_EQUAL_UINT8(COOLANT_CRIT, s.alertCoolant);
+    settings_ui::tap(277, 126, s);                                               // low-batt +
+    TEST_ASSERT_EQUAL_UINT8(119, s.alertVoltLo);
+    settings_ui::tap(87, 218, s);                                                // RESET DEFAULT
+    TEST_ASSERT_EQUAL_UINT8(118, s.alertVoltLo);
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(282, 15, s));      // BACK -> main page
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(160, 160, s));     // empty gap -> no-op
+
+    // HONDA model sub-page: tap HONDA again (already the source) to open; pick a model.
+    s.source = SRC_HONDA;
+    settings_ui::openMain();
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(159, 106, s));     // HONDA again -> model page
+    TEST_ASSERT_EQUAL_UINT8(HM_WAVE110, s.hondaModel);                           // default
+    settings_ui::tap(160, 148, s);                                              // pick GIORNO card
+    TEST_ASSERT_EQUAL_UINT8(HM_GIORNO, s.hondaModel);
+    TEST_ASSERT_EQUAL_UINT16(9000, s.shiftRpm);                                 // Giorno default shift
+    settings_ui::tap(160, 84, s);                                              // pick WAVE card
+    TEST_ASSERT_EQUAL_UINT8(HM_WAVE110, s.hondaModel);
+    TEST_ASSERT_EQUAL_UINT16(8500, s.shiftRpm);                                 // Wave default shift
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(282, 15, s));      // BACK
+    settings_ui::openMain();
 }
 
 static void test_settings_limits() {
     gauge_ui::begin(push, kThemes[0]);
     Settings s;
-    for (int i = 0; i < 40; i++) settings_ui::tap(118, 187, s);                  // SHIFT +
+    for (int i = 0; i < 40; i++) settings_ui::tap(118, 147, s);                  // SHIFT +
     TEST_ASSERT_EQUAL_UINT16(Settings::kShiftMax, s.shiftRpm);
-    for (int i = 0; i < 40; i++) settings_ui::tap(20, 187, s);                   // SHIFT -
+    for (int i = 0; i < 40; i++) settings_ui::tap(20, 147, s);                   // SHIFT -
     TEST_ASSERT_EQUAL_UINT16(Settings::kShiftMin, s.shiftRpm);
 #if BACKLIGHT_DIMMING
-    for (int i = 0; i < 10; i++) settings_ui::tap(180, 187, s);                  // BRIGHTNESS -
+    for (int i = 0; i < 10; i++) settings_ui::tap(180, 147, s);                  // BRIGHTNESS -
     TEST_ASSERT_EQUAL_UINT8(Settings::kBrightMin, s.brightness);
-    for (int i = 0; i < 10; i++) settings_ui::tap(280, 187, s);                  // BRIGHTNESS +
+    for (int i = 0; i < 10; i++) settings_ui::tap(280, 147, s);                  // BRIGHTNESS +
     TEST_ASSERT_EQUAL_UINT8(100, s.brightness);
 #else
     s.brightness = 100;                                                          // row hidden: taps ignored
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(180, 187, s));
-    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(280, 187, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(180, 147, s));
+    TEST_ASSERT_EQUAL(settings_ui::ACT_NONE, settings_ui::tap(280, 147, s));
     TEST_ASSERT_EQUAL_UINT8(100, s.brightness);
 #endif
     bool beep = s.beep;
-    settings_ui::tap(58, 212, s);                                                // BEEP toggle
+    settings_ui::tap(43, 190, s);                                                // BEEP toggle
     TEST_ASSERT_NOT_EQUAL(beep, s.beep);
 }
 

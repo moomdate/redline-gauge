@@ -29,6 +29,10 @@ public:
     // background image. Returns false if the rect does not fit the buffer.
     bool begin(int x, int y, int rw, int rh, const uint16_t *background320x240);
 
+    // Like begin(), but fills the region with one solid colour (no background image).
+    // Used by skins that compose over a flat backdrop instead of baked art.
+    bool beginSolid(int x, int y, int rw, int rh, uint16_t color);
+
     // All drawing below takes SCREEN coordinates and clips to the region.
     void pixel(int x, int y, uint16_t c);
     void blendPixel(int x, int y, uint16_t c, uint8_t alpha);

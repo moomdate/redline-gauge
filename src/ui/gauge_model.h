@@ -20,6 +20,7 @@ struct GaugeView {
 
     bool  speedValid;
     int   speed;
+    float tripKm;        // distance since power-on, integrated from speed
     int   gear;          // -1 = hidden, 0 = neutral
 
     bool  coolValid;  int   coolant; Level coolLvl;
@@ -55,15 +56,23 @@ public:
     void setShiftRpm(int rpm) { shiftRpm_ = rpm; }
     void setPanels(uint8_t set) { panels_ = set; }      // PanelSet
     void setGearHidden(bool off) { gearOff_ = off; }
+    // Critical-alert trigger points (user-adjustable on the SETTINGS -> ALERT page). voltLo in volts.
+    void setAlertThresholds(int coolC, float voltLo, int iatC) {
+        coolCrit_ = coolC; voltLoCrit_ = voltLo; iatCrit_ = iatC;
+    }
     void update(const GaugeSnapshot &s, uint32_t now, const char *modeName, GaugeView &out);
 
 private:
     uint32_t t0_ = 0, last_ = 0;
     float    rpmSmooth_ = 0, speedSmooth_ = 0, afrSmooth_ = 0;
     float    peak_ = 0;
+    float    tripKm_ = 0;
     uint32_t peakAt_ = 0;
     int      sessionPeak_ = 0;
     int      shiftRpm_ = RPM_SHIFT;
+    int      coolCrit_ = COOLANT_CRIT;      // overheat alert point, °C
+    float    voltLoCrit_ = VOLT_LOW_CRIT;   // low-battery alert point, V
+    int      iatCrit_ = IAT_CRIT;           // hot-intake alert point, °C
     uint8_t  panels_ = 0;            // PANELS_AUTO
     bool     gearOff_ = false;
     int      gear_ = 0;              // gear shown last frame (GEAR_HOLD)
