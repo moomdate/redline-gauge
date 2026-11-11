@@ -1,5 +1,5 @@
 #pragma once
-#define REDLINE_VERSION "2.0.1"
+#define REDLINE_VERSION "2.0.2"
 
 #if defined(ILI9341_2_DRIVER) && defined(ST7789_DRIVER)
 #error "Two TFT drivers defined: TFT_eSPI silently picks ILI9341. Define exactly one per env."

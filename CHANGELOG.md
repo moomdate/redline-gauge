@@ -4,6 +4,16 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [2.0.2] - 2026-11-11
+
+### Added
+- **mph everywhere** (SETUP -> OPTIONS -> KM/H / MPH, or `units=mph`):
+  - DATA WAVE and RACE CODE show "mph" under the speed (it was always "km/h"), and TRIP reads in miles.
+  - The drag timer times **0-60, 60-80, 80-100 and 0-120 mph** in mph mode (km/h mode keeps 0-100, 100-120,
+    120-160, 0-200 km/h). The live NEXT target, result labels, speed bar, BEST and split boxes follow the unit.
+  - Each saved run remembers its unit; the RUN LOG page lists the runs timed in the selected unit, with the top
+    speed in that unit. Existing logs load unchanged (their runs are km/h runs). `timerlog` prints a unit column.
+
 ## [2.0.1] - 2026-11-11
 
 ### Fixed
