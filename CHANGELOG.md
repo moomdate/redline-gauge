@@ -4,6 +4,19 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [2.0.1] - 2026-11-11
+
+### Fixed
+- **HONDA K on Giorno+ / Lead (and other non-Wave ECUs):** the gauge only asked table `0x17` (the Wave table), so an
+  ECU that answers another table showed nothing. At connect it now tries the main tables and keeps the first that
+  answers (Wave profile: `0x17` first; Giorno profile: `0x11` / `0x10` first), and decodes values by that table's
+  layout: on `0x11` / `0x10` battery comes from D16 and the ECU speed from D17; a `0x17` reply with D9 = FF reads
+  the engine temperature from D13. MAP and ECU speed are shown when the table has them.
+- **No false overheat alert when a sensor is missing:** a temperature byte of FF ("no sensor") read as 215 °C; it
+  now shows `--`.
+- Not yet checked against a real Giorno+ / Lead ECU or the bench ECU simulator: the `0x11` layout follows the
+  reference gauge's decoder. Serial `kdump` lists every table the ECU answers if values look wrong.
+
 ## [2.0.0] - 2026-11-11
 
 ### Added
