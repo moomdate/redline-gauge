@@ -3,7 +3,8 @@
 #include <math.h>
 #include <string.h>
 
-constexpr float DragTimer::kTh[];
+constexpr float DragTimer::kThKmh[];
+constexpr float DragTimer::kThMph[];
 
 // segment -> (begin threshold, end threshold); -1 = the launch
 static const int8_t kSegFrom[SEG_COUNT] = { -1, 0, 1, -1, 2 };
@@ -26,7 +27,7 @@ static bool freshSample(uint32_t stamp, uint32_t now) {
 
 // ---- log -------------------------------------------------------------------------------
 void RunLog::add(RunRecord r) {
-    r.seq = nextSeq++;
+    r.seq = (uint16_t)((r.seq & RUN_MPH) | (nextSeq++ & 0x7FFF));
     if (count < kMax) count++;
     memmove(&runs[1], &runs[0], sizeof(RunRecord) * (count - 1));
     runs[0] = r;
@@ -38,14 +39,20 @@ void RunLog::clear() {
     memset(runs, 0, sizeof runs);
 }
 
-uint16_t RunLog::best(int seg) const {
+uint16_t RunLog::best(int seg, bool mph) const {
     uint16_t b = RUN_NONE;
     for (int i = 0; i < count; i++)
-        if (runs[i].cs[seg] < b) b = runs[i].cs[seg];
+        if (((runs[i].seq & RUN_MPH) != 0) == mph && runs[i].cs[seg] < b) b = runs[i].cs[seg];
     return b;
 }
 
 // ---- timer -----------------------------------------------------------------------------
+void DragTimer::setMph(bool mph) { wantMph_ = mph; if (state_ != TS_RUN) applyUnits(); }
+void DragTimer::applyUnits() {
+    mph_ = wantMph_;
+    for (int i = 0; i < kThresholds; i++) th_[i] = mph_ ? kThMph[i] * 1.609344f : kThKmh[i];
+}
+
 void DragTimer::again() {
     state_ = lastStamp_ ? TS_MOVING : TS_NO_SPEED;
     stillSince_ = -1;
@@ -55,6 +62,7 @@ void DragTimer::again() {
 }
 
 void DragTimer::begin(double t) {
+    applyUnits();                          // a units change made while idle / mid-run
     state_ = TS_RUN;
     start_ = zeroT_;                       // provisional: the last standstill sample
     firstT_ = t;
@@ -100,7 +108,7 @@ float DragTimer::segTime(int seg, uint32_t now) const {
 float DragTimer::segProgress(int seg) const {
     if (segDone(seg)) return 1;
     if (!segActive(seg)) return 0;
-    float lo = kSegFrom[seg] < 0 ? 0 : kTh[kSegFrom[seg]], hi = kTh[kSegTo[seg]];
+    float lo = kSegFrom[seg] < 0 ? 0 : th_[kSegFrom[seg]], hi = th_[kSegTo[seg]];
     float p = (lastV_ - lo) / (hi - lo);
     return p < 0 ? 0 : p > 1 ? 1 : p;
 }
@@ -119,8 +127,9 @@ TimerEvent DragTimer::end(const RunLog &log) {
         if (!segDone(s)) continue;
         double cs = (segEnd(s) - segBegin(s)) / 10.0;
         rec_.cs[s] = cs < 0 ? 0 : cs > 65000 ? 65000 : (uint16_t)lround(cs);
-        newBest_[s] = rec_.cs[s] < log.best(s);
+        newBest_[s] = rec_.cs[s] < log.best(s, mph_);
     }
+    rec_.seq = mph_ ? RUN_MPH : 0;               // RunLog::add fills in the number
     rec_.maxKmh = (uint16_t)lroundf(maxV_);
     double toMax = (maxT_ - start_) / 10.0;
     rec_.toMaxCs = toMax < 0 ? 0 : toMax > 65000 ? 65000 : (uint16_t)lround(toMax);
@@ -190,8 +199,8 @@ TimerEvent DragTimer::update(float v, uint32_t stamp, uint32_t now, const RunLog
             }
         }
         for (int i = 0; i < kThresholds; i++)
-            if (!crossed_[i] && v >= kTh[i]) {
-                float f = v > lastV_ ? (kTh[i] - lastV_) / (v - lastV_) : 1;
+            if (!crossed_[i] && v >= th_[i]) {
+                float f = v > lastV_ ? (th_[i] - lastV_) / (v - lastV_) : 1;
                 if (f < 0) f = 0;
                 cross_[i] = lastT_ + f * (t - lastT_);
                 crossed_[i] = true;

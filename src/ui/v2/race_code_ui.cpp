@@ -12,6 +12,7 @@
 #include "fonts/font_small.h"
 #include "fonts/font_label.h"
 #include "fonts/font_rc_unit.h"
+#include "fonts/font_spd_unit.h"
 #include "assets/skin_icons.h"
 #include "ui/i18n.h"
 #include <math.h>
@@ -38,13 +39,14 @@ struct Tile { int xl, xr, labelBase, valBase, iconCy; };
 static const Tile TILE[3] = { { 11, 79,  64,  83,  71 },
                               { 10, 76, 108, 127, 114 },
                               { 13, 85, 153, 172, 160 } };
-static const Rect R_TRIP  = {  50, 192,  49, 16 };
+static const Rect R_TRIP  = {  50, 192,  68, 16 };     // value + km / mi
+static const Rect R_UNIT  = { 160, 152,  52, 18 };     // speed unit under the number (km/h / mph)
 static const Rect R_MODE  = { 258,   6,  56, 18 };     // the mockup's clock box
 static const Rect R_SETUP = { 226, 192,  78, 20 };     // inside the mockup's SPORT badge
 
-enum { RG_SPEED, RG_RPM, RG_GEAR, RG_T0, RG_T1, RG_T2, RG_TRIP, RG_MODE, RG_SETUP, RG_COUNT };
+enum { RG_SPEED, RG_RPM, RG_GEAR, RG_T0, RG_T1, RG_T2, RG_TRIP, RG_MODE, RG_SETUP, RG_UNIT, RG_COUNT };
 static const Rect *const kRect[RG_COUNT] = { &R_SPEED, &R_RPM, &R_GEAR, &R_TILE0, &R_TILE1, &R_TILE2,
-                                             &R_TRIP, &R_MODE, &R_SETUP };
+                                             &R_TRIP, &R_MODE, &R_SETUP, &R_UNIT };
 
 // Dial calibration: angle (deg, 0 = up, clockwise) of the numerals 0..9 (x1000 rpm) on the plate.
 static const float kNumA[10] = { -136.4f, -85.3f, -57.6f, -33.1f, -1.9f, 28.6f, 59.4f, 84.0f,
@@ -233,7 +235,7 @@ static void drawSetup() {
 }
 
 // ---- public -----------------------------------------------------------------------------------
-void setUnits(uint8_t units) { s_units = units ? 1 : 0; s_key[RG_SPEED][0] = 1; }
+void setUnits(uint8_t units) { s_units = units ? 1 : 0; s_key[RG_SPEED][0] = s_key[RG_UNIT][0] = s_key[RG_TRIP][0] = 1; }
 void setTheme(const Theme &) { redrawAll(); }
 
 void begin(PushFn push, const Theme &theme) {
@@ -283,8 +285,22 @@ void render(const GaugeView &v) {
 
     for (int t = 0; t < 3; t++) drawTile(t, v);
 
-    snprintf(b, sizeof b, "%.1f", v.tripKm);
-    drawText(RG_TRIP, b, true, font_rc_small, 97, 205, ALIGN_RIGHT);
+    snprintf(b, sizeof b, "%.1f", s_units ? v.tripKm * 0.621371f : v.tripKm);
+    {
+        char key[20]; snprintf(key, sizeof key, "%s%u", b, s_units);
+        if (changed(RG_TRIP, key) && beginRegion(R_TRIP)) {
+            cv().text(font_rc_small, 97, 205, b, C(WHITE), ALIGN_RIGHT, 0, true);
+            cv().text(font_rc_unit, 100, 205, s_units ? "mi" : "km", C(0xC9D2D8), ALIGN_LEFT);
+            flush();
+        }
+    }
+    {
+        const char *u = s_units ? "mph" : "km/h";
+        if (changed(RG_UNIT, u) && beginRegion(R_UNIT)) {
+            cv().text(font_spd_unit, 185, 165, u, C(0xE6ECEF), ALIGN_CENTER, 1);
+            flush();
+        }
+    }
 
     drawText(RG_MODE, v.mode ? v.mode : "", true, font_small, 310, 20, ALIGN_RIGHT, 0xC9D2D8);
     drawSetup();

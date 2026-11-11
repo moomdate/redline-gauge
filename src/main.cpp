@@ -498,13 +498,14 @@ static void saveRunLog() {
 }
 
 static void printRunLog() {
-    static const char *const names[SEG_COUNT] = { "0-100", "100-120", "120-160", "0-200", "160-200" };
-    Serial.printf("run");
+    // segments are km/h splits (0-100 ..) for km/h runs and 0-60 / 60-80 / 80-100 / 0-120 / 100-120 mph for mph runs
+    static const char *const names[SEG_COUNT] = { "split1", "split2", "split3", "full", "last" };
+    Serial.printf("run,unit");
     for (const char *n : names) Serial.printf(",%s", n);
     Serial.println(",max_kmh,to_max_s");
     for (int i = runLog.count - 1; i >= 0; i--) {             // oldest first, like a spreadsheet
         const RunRecord &r = runLog.runs[i];
-        Serial.printf("%u", r.seq);
+        Serial.printf("%u,%s", r.seq & 0x7FFF, (r.seq & RUN_MPH) ? "mph" : "kmh");
         for (int s = 0; s < SEG_COUNT; s++)
             if (r.cs[s] == RUN_NONE) Serial.print(",");
             else Serial.printf(",%u.%02u", r.cs[s] / 100, r.cs[s] % 100);
@@ -563,6 +564,7 @@ static void applySettings(const Settings &next, bool repaint) {
     data_wave_ui::setUnits(next.units);
     race_code_ui::setUnits(next.units);
     timer_ui::setUnits(next.units);
+    dragTimer.setMph(next.units != 0);              // splits 0-60/60-80/80-100/0-120 mph
     gauge_ui::setAlertsEnabled(next.alerts);
     gauge_ui::setTempIsOil(next.source == SRC_HONDA && next.hondaModel == HM_WAVE110);   // Wave = air-cooled (OIL TEMP)
     HondaKSource::setPreferWave(next.hondaModel == HM_WAVE110);   // which main table to try first
@@ -936,6 +938,7 @@ void setup() {
     gauge_ui::setPanelItems(settings.panelItem);
     gauge_ui::setUnits(settings.units);
     timer_ui::setUnits(settings.units);
+    dragTimer.setMph(settings.units != 0);
     gauge_ui::setAlertsEnabled(settings.alerts);
     gauge_ui::setTempIsOil(settings.source == SRC_HONDA && settings.hondaModel == HM_WAVE110);
     HondaKSource::setPreferWave(settings.hondaModel == HM_WAVE110);

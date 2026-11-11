@@ -11,6 +11,7 @@
 #include "fonts/font_rc_small.h"
 #include "fonts/font_rc_unit.h"
 #include "fonts/font_label.h"
+#include "fonts/font_spd_unit.h"
 #include "fonts/font_small.h"
 #include "ui/i18n.h"
 #include <math.h>
@@ -30,6 +31,7 @@ static const Rect R_GEAR  = {  30, 144,  40, 40 };
 static const Rect R_MODE  = { 262,   3,  48, 17 };     // where the mockup had a clock
 static const Rect R_SETUP = { 258, 209,  56, 26 };     // over the mockup's "TIME ATTACK" badge
 static const Rect R_TRIP  = {   6, 207,  92, 17 };     // where the mockup had LAP
+static const Rect R_UNIT  = {  50, 110,  46, 16 };     // speed unit under the number (km/h / mph)
 static const Rect R_RPM   = { 133,  44,  68, 22 };
 static const Rect R_ICON  = { 102, 157,  25, 26 };     // row 4 icon (temperature items)
 static const Rect R_WAVE[4] = { { 203,  40, 106, 25 }, { 200,  81, 109, 26 },
@@ -43,7 +45,7 @@ static const Row ROW[3] = {
 };
 static const Rect R_HIT[3] = { { 110, 74, 210, 37 }, { 100, 112, 220, 37 }, { 95, 149, 225, 40 } };
 
-enum { RG_SPEED, RG_GEAR, RG_MODE, RG_SETUP, RG_TRIP, RG_RPM, RG_ICON,
+enum { RG_SPEED, RG_UNIT, RG_GEAR, RG_MODE, RG_SETUP, RG_TRIP, RG_RPM, RG_ICON,
        RG_L0, RG_V0 = RG_L0 + 3, RG_W0 = RG_V0 + 3, RG_COUNT = RG_W0 + 4 };
 
 // ---- graph history ----------------------------------------------------------------------------
@@ -129,6 +131,13 @@ static void drawSpeed(const GaugeView &v) {
     flush();
 }
 
+static void drawUnit() {
+    const char *u = s_units ? "mph" : "km/h";
+    if (!changed(RG_UNIT, u) || !beginRegion(R_UNIT)) return;
+    cv().text(font_spd_unit, 73, 121, u, C(0xE6ECEF), ALIGN_CENTER, 1);
+    flush();
+}
+
 static void drawGear(const GaugeView &v) {
     char g[4] = "-";
     if (v.gear == 0) strcpy(g, "N"); else if (v.gear > 0) snprintf(g, sizeof g, "%d", v.gear);
@@ -161,14 +170,14 @@ static void drawSetup() {
 }
 
 static void drawTrip(const GaugeView &v) {
-    char val[12]; snprintf(val, sizeof val, "%.1f", v.tripKm);
-    char key[20]; snprintf(key, sizeof key, "%s%u", val, i18n::lang);
+    char val[12]; snprintf(val, sizeof val, "%.1f", s_units ? v.tripKm * 0.621371f : v.tripKm);
+    char key[20]; snprintf(key, sizeof key, "%s%u%u", val, i18n::lang, s_units);
     if (!changed(RG_TRIP, key) || !beginRegion(R_TRIP)) return;
     int x = 12;
     x += cv().text(i18n::font(font_label), x, 219, i18n::T("TRIP", "ระยะทาง"), C(0xE6ECEF), ALIGN_LEFT, 1);
     x += 6;
     x += cv().text(font_rc_small, x, 220, val, C(0xF4F6F8), ALIGN_LEFT, 0, true);
-    cv().text(font_rc_unit, x + 3, 220, "km", C(0xC9D2D8), ALIGN_LEFT);
+    cv().text(font_rc_unit, x + 3, 220, s_units ? "mi" : "km", C(0xC9D2D8), ALIGN_LEFT);
     flush();
 }
 
@@ -228,7 +237,7 @@ static float fracFor(int i, const GaugeView &v) {
 }
 
 // ---- public -----------------------------------------------------------------------------------
-void setUnits(uint8_t units) { s_units = units ? 1 : 0; s_key[RG_SPEED][0] = 1; }
+void setUnits(uint8_t units) { s_units = units ? 1 : 0; s_key[RG_SPEED][0] = s_key[RG_UNIT][0] = s_key[RG_TRIP][0] = 1; }
 
 void setTheme(const Theme &) {
     // The plate is red-on-carbon whatever the colour theme; graph colours follow the mockup.
@@ -268,6 +277,7 @@ void render(const GaugeView &v) {
     int ch = s_frame++ & 3;                       // one graph sampled per frame: ~15 Hz each
     waveAdd(s_wave[ch], fracFor(ch, v));
     drawSpeed(v);
+    drawUnit();
     drawGear(v);
     drawMode(v);
     drawSetup();

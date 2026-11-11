@@ -139,6 +139,10 @@ static void dataWaveFrame() {
         data_wave_ui::render(v);
     }
     save("out/datawave.ppm");
+    data_wave_ui::setUnits(1);
+    for (int i = 0; i < 4; i++) data_wave_ui::render(v);
+    save("out/datawave_mph.ppm");
+    data_wave_ui::setUnits(0);
 }
 
 static void raceCodeFrame() {
@@ -152,6 +156,10 @@ static void raceCodeFrame() {
     for (int k = 0; k < 4; k++)
         for (int i = 0; i < 12; i++) { v.rpmBar = (float)rpms[k]; v.rpmText = rpms[k]; race_code_ui::render(v); }
     save("out/racecode.ppm");
+    race_code_ui::setUnits(1);
+    for (int i = 0; i < 4; i++) race_code_ui::render(v);
+    save("out/racecode_mph.ppm");
+    race_code_ui::setUnits(0);
     v.rpmBar = 2100; v.rpmText = 2100; v.gear = 2; v.speed = 42;
     for (int i = 0; i < 12; i++) race_code_ui::render(v);
     save("out/racecode_low.ppm");

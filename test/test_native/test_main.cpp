@@ -458,6 +458,32 @@ static void test_drag_timer_constant_accel() {
     for (int s = 0; s < SEG_COUNT; s++) TEST_ASSERT_TRUE(d.t.newBest(s));   // empty log: all best
 }
 
+// mph: splits at 60 / 80 / 100 / 120 mph; the run is tagged mph in the log and only competes with mph runs
+static void test_drag_timer_mph() {
+    DragSim d;
+    d.t.setMph(true);
+    d.t.again();
+    for (int i = 0; i < 8; i++) d.feed(0);
+    uint32_t launch = d.ms + 70;
+    while (d.t.state() != TS_FINISH && d.ms < launch + 40000) {
+        uint32_t next = d.ms + 200;
+        d.feed(next > launch ? (next - launch) / 1000.0f * 10.0f : 0, 200, false);   // 10 km/h per s
+    }
+    TEST_ASSERT_EQUAL(TS_FINISH, d.t.state());                      // 120 mph = 193 km/h, before 200
+    const RunRecord &r = d.t.record();
+    TEST_ASSERT_UINT16_WITHIN(15, 966, r.cs[SEG_0_100]);             // 0-60 mph = 96.6 km/h -> 9.66 s
+    TEST_ASSERT_UINT16_WITHIN(15, 1931, r.cs[SEG_0_200]);            // 0-120 mph = 193.1 km/h
+    TEST_ASSERT_EQUAL_UINT16(RUN_MPH, r.seq & RUN_MPH);
+    TEST_ASSERT_EQUAL(120, d.t.thLabel(3));
+    RunLog log;
+    log.add(r);
+    TEST_ASSERT_EQUAL_UINT16(RUN_MPH | 1, log.runs[0].seq);         // number kept, mph flag kept
+    TEST_ASSERT_EQUAL_UINT16(RUN_NONE, log.best(SEG_0_100, false));  // not a km/h best
+    TEST_ASSERT_UINT16_WITHIN(15, 966, log.best(SEG_0_100, true));
+    d.t.setMph(false);                                              // back to km/h: 0-200 again
+    TEST_ASSERT_EQUAL(200, d.t.thLabel(3));
+}
+
 static void test_drag_timer_lift_and_arming() {
     DragSim d;
     d.t.again();
@@ -1410,6 +1436,7 @@ int main(int, char **) {
     RUN_TEST(test_extra_panel_items_are_selectable);
     RUN_TEST(test_touch_cal_solve);
     RUN_TEST(test_drag_timer_constant_accel);
+    RUN_TEST(test_drag_timer_mph);
     RUN_TEST(test_drag_timer_lift_and_arming);
     RUN_TEST(test_drag_timer_throttle_start);
     RUN_TEST(test_run_log);

@@ -20,9 +20,12 @@
 
 enum Seg : uint8_t { SEG_0_100, SEG_100_120, SEG_120_160, SEG_0_200, SEG_160_200, SEG_COUNT };
 static const uint16_t RUN_NONE = 0xFFFF;
+// RunRecord::seq top bit: the run was timed in mph (0-60 / 60-80 / 80-100 / 0-120 mph) rather than
+// km/h (0-100 / 100-120 / 120-160 / 0-200). Kept in seq so the saved log layout is unchanged.
+static const uint16_t RUN_MPH = 0x8000;
 
 struct RunRecord {
-    uint16_t seq;                 // run number, 1..
+    uint16_t seq;                 // run number, 1.. (| RUN_MPH for an mph run)
     uint16_t cs[SEG_COUNT];       // segment times in 1/100 s, RUN_NONE = not reached
     uint16_t maxKmh;
     uint16_t toMaxCs;             // time from launch to the top speed, 1/100 s
@@ -38,7 +41,7 @@ struct RunLog {
 
     void     add(RunRecord r);    // assigns seq
     void     clear();
-    uint16_t best(int seg) const; // fastest cs of a segment, RUN_NONE if none
+    uint16_t best(int seg, bool mph = false) const;   // fastest cs of a segment among runs in that unit
 };
 
 enum TimerState : uint8_t { TS_NO_SPEED, TS_MOVING, TS_STAGED, TS_RUN, TS_FINISH, TS_SAVED, TS_NO_RESULT };
@@ -47,7 +50,13 @@ enum TimerEvent : uint8_t { TE_NONE, TE_ARMED, TE_START, TE_SPLIT, TE_FINISH, TE
 class DragTimer {
 public:
     static const int kThresholds = 4;
-    static constexpr float kTh[kThresholds] = { 100, 120, 160, 200 };
+    static constexpr float kThKmh[kThresholds] = { 100, 120, 160, 200 };   // km/h
+    static constexpr float kThMph[kThresholds] = { 60, 80, 100, 120 };     // mph
+    // Speed units of the splits; takes effect from the next run (never mid-run).
+    void  setMph(bool mph);
+    bool  mph() const { return mph_; }
+    float th(int i) const { return th_[i]; }                              // km/h
+    int   thLabel(int i) const { return (int)(mph_ ? kThMph[i] : kThKmh[i]); }   // in the shown unit
 
     void again();                               // drop any result / run, wait for a stop
     // Call every frame with the newest speed sample (stamp 0 = no data yet). `now` may be a
@@ -89,6 +98,9 @@ private:
     double   maxT_ = 0;                         // when the top speed was reached
     bool     newBest_[SEG_COUNT] = {};
     RunRecord rec_ = {};
+    bool     mph_ = false, wantMph_ = false;
+    float    th_[kThresholds] = { 100, 120, 160, 200 };
+    void     applyUnits();
 
     void       begin(double t);
     TimerEvent end(const RunLog &log);

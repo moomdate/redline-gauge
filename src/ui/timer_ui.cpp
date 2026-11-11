@@ -348,28 +348,28 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
         fmtSec(tnum, sizeof tnum, t.elapsed(now));
         tColor = T.accentBright;
         int next = 0;
-        while (next < DragTimer::kThresholds - 1 && t.speed() >= DragTimer::kTh[next]) next++;
-        snprintf(right, sizeof right, "NEXT %d KM/H", (int)DragTimer::kTh[next]);
+        while (next < DragTimer::kThresholds - 1 && t.speed() >= t.th(next)) next++;
+        snprintf(right, sizeof right, "NEXT %d %s", t.thLabel(next), t.mph() ? "MPH" : "KM/H");
     } else if (st == TS_FINISH) {
         fmtSec(tnum, sizeof tnum, t.segTime(SEG_0_200, now));
-        snprintf(tlabel, sizeof tlabel, "0-200");
+        snprintf(tlabel, sizeof tlabel, "0-%d", t.thLabel(3));
         tColor = T.good;
         if (t.newBest(SEG_0_200)) tag = "NEW BEST";
         else snprintf(right, sizeof right, "FINISH");
     } else if (st == TS_SAVED) {                         // didn't reach 200: time to its top speed
         fmtSec(tnum, sizeof tnum, t.toMax());
-        snprintf(tlabel, sizeof tlabel, "0-%d", (int)lroundf(t.maxKmh()));
+        snprintf(tlabel, sizeof tlabel, "0-%d", displaySpeed((int)lroundf(t.maxKmh()), s_units));
         tColor = 0xffffff;
         snprintf(right, sizeof right, "TOP %d %s", displaySpeed((int)lroundf(t.maxKmh()), s_units), s_units ? "MPH" : "KM/H");
     } else if (st == TS_NO_RESULT) {
         fmtSec(tnum, sizeof tnum, -1);
-        snprintf(right, sizeof right, "UNDER 30 - NOT LOGGED");
+        snprintf(right, sizeof right, s_units ? "UNDER 19 MPH - NOT LOGGED" : "UNDER 30 KM/H - NOT LOGGED");
     } else {
         snprintf(label, sizeof label, st == TS_STAGED ? "LAUNCH TO START"
                                     : st == TS_MOVING ? "STOP TO ARM" : "NO SPEED YET");
-        uint16_t b200 = log.best(SEG_0_200), b100 = log.best(SEG_0_100);
-        if (b200 != RUN_NONE) snprintf(right, sizeof right, "BEST 0-200 %u.%02u", b200 / 100, b200 % 100);
-        else if (b100 != RUN_NONE) snprintf(right, sizeof right, "BEST 0-100 %u.%02u", b100 / 100, b100 % 100);
+        uint16_t b200 = log.best(SEG_0_200, t.mph()), b100 = log.best(SEG_0_100, t.mph());
+        if (b200 != RUN_NONE) snprintf(right, sizeof right, "BEST 0-%d %u.%02u", t.thLabel(3), b200 / 100, b200 % 100);
+        else if (b100 != RUN_NONE) snprintf(right, sizeof right, "BEST 0-%d %u.%02u", t.thLabel(0), b100 / 100, b100 % 100);
     }
     if (st == TS_STAGED) {
         drawBig(label, right, tag, "", 0, "");                 // label row only
@@ -384,12 +384,18 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
     else if (st == TS_FINISH) drawBar(SLOT_COUNT, T.good, 0);
     else if (st == TS_RUN || st == TS_SAVED || st == TS_NO_RESULT) {
         float v = st == TS_RUN ? t.speed() : t.maxKmh();
-        drawBar(SLOT_COUNT * (v > 200 ? 1 : v / 200), T.accent, 0);
+        const float top = t.th(3);
+        drawBar(SLOT_COUNT * (v > top ? 1 : v / top), T.accent, 0);
     } else drawBar(0, T.accent, 0);
 
     // split boxes: stamped when the speed is reached; READY keeps the last run on screen
     static const Seg kBoxSeg[4] = { SEG_0_100, SEG_100_120, SEG_120_160, SEG_0_200 };
-    static const char *const kBoxLbl[4] = { "0-100", "100-120", "120-160", "0-200 KM/H" };
+    static const char *const kBoxKmh[4] = { "0-100", "100-120", "120-160", "0-200 KM/H" };
+    static const char *const kBoxMph[4] = { "0-60", "60-80", "80-100", "0-120 MPH" };
+    const char *const *kBoxLbl = t.mph() ? kBoxMph : kBoxKmh;
+    const RunRecord *lastRun = nullptr;               // newest saved run in the current unit
+    for (int i = 0; i < log.count && !lastRun; i++)
+        if (((log.runs[i].seq & RUN_MPH) != 0) == t.mph()) lastRun = &log.runs[i];
     bool showing = st == TS_RUN || t.hasResult() || st == TS_NO_RESULT;
     for (int i = 0; i < 4; i++) {
         Seg s = kBoxSeg[i];
@@ -401,9 +407,9 @@ void render(const DragTimer &t, const RunLog &log, uint32_t now, bool speedValid
                 float age = t.segAge(s, now);
                 ps = age < kFlashS ? PS_FRESH : t.newBest(s) ? PS_BEST : PS_DONE;
             } else if (t.segActive(s)) ps = PS_ACTIVE;        // being chased: stamped when reached
-        } else if (log.count && log.runs[0].cs[s] != RUN_NONE) {
+        } else if (lastRun && lastRun->cs[s] != RUN_NONE) {
             ps = PS_DONE;
-            tm = log.runs[0].cs[s] / 100.0f;
+            tm = lastRun->cs[s] / 100.0f;
         }
         fmtSec(num, sizeof num, tm);
         drawBox(i, kBoxLbl[i], num, ps, showing ? t.segProgress(s) : 0);
@@ -443,27 +449,35 @@ static void composeLog(const RunLog &log) {
     for (int i = 0; i < c.w * c.h; i++) c.px[i] = blend565(215, 0, c.px[i]);
     c.text(font_ui, 12, 20, "RUN LOG", C(T.accentBright), ALIGN_LEFT, 2);
     char buf[48];
+    // the page lists the runs timed in the selected unit (km/h and mph runs have different splits)
+    const bool mph = s_units != 0;
+    const RunRecord *list[RunLog::kMax];
+    int n = 0;
+    for (int i = 0; i < log.count; i++)
+        if (((log.runs[i].seq & RUN_MPH) != 0) == mph) list[n++] = &log.runs[i];
     if (s_confirm) snprintf(buf, sizeof buf, "DELETE ALL %d RUN%s?", log.count, log.count == 1 ? "" : "S");
-    else snprintf(buf, sizeof buf, "%d run%s saved", log.count, log.count == 1 ? "" : "s");
+    else snprintf(buf, sizeof buf, "%d run%s in %s", n, n == 1 ? "" : "s", mph ? "MPH" : "KM/H");
     c.text(font_small, 100, 19, buf, C(s_confirm ? 0xff2e2e : C_MUTED));
     button(L_BACK, "BACK", T.accent, true);
     for (int x = 8; x < 312; x++) c.blendPixel(x, 30, C(T.accent), (uint8_t)(255 - (x - 8) * 200 / 304));
 
     static const int cx[6] = { 12, 36, 82, 128, 174, 220 };
-    static const char *const hdr[6] = { "#", "0-100", "100-120", "120-160", "0-200", "TOP @TIME" };
+    static const char *const hdrKmh[6] = { "#", "0-100", "100-120", "120-160", "0-200", "TOP @TIME" };
+    static const char *const hdrMph[6] = { "#", "0-60", "60-80", "80-100", "0-120", "TOP @TIME" };
+    const char *const *hdr = mph ? hdrMph : hdrKmh;
     static const Seg cols[4] = { SEG_0_100, SEG_100_120, SEG_120_160, SEG_0_200 };
     for (int k = 0; k < 6; k++) c.text(font_small, cx[k], 44, hdr[k], C(C_MUTED));
     c.fillRect(8, 48, 304, 1, C(C_EDGE));
     uint16_t best[4];
-    for (int k = 0; k < 4; k++) best[k] = log.best(cols[k]);
+    for (int k = 0; k < 4; k++) best[k] = log.best(cols[k], mph);
 
-    const int rows = log.count < 6 ? log.count : 6;     // newest 6 on screen; `timerlog` prints all
+    const int rows = n < 6 ? n : 6;                     // newest 6 on screen; `timerlog` prints all
     if (!rows) c.text(font_small, 160, 110, "No runs yet - launch from READY", C(C_MUTED), ALIGN_CENTER);
     for (int r = 0; r < rows; r++) {
-        const RunRecord &rec = log.runs[r];
+        const RunRecord &rec = *list[r];
         int y = 64 + r * 21;
         if (r == 0) c.blendRect(8, y - 12, 304, 18, C(T.accent), 40);
-        snprintf(buf, sizeof buf, "%u", rec.seq);
+        snprintf(buf, sizeof buf, "%u", rec.seq & 0x7FFF);
         c.text(font_small, cx[0], y, buf, C(C_MUTED));
         for (int k = 0; k < 4; k++) {
             uint16_t v = rec.cs[cols[k]];
@@ -471,11 +485,11 @@ static void composeLog(const RunLog &log) {
             uint32_t col = v == RUN_NONE ? C_DIM : v == best[k] ? T.good : 0xffffff;
             c.text(font_small, cx[k + 1], y, buf, C(col));
         }
-        snprintf(buf, sizeof buf, "%u @%u.%01u", rec.maxKmh, rec.toMaxCs / 100, rec.toMaxCs % 100 / 10);
+        snprintf(buf, sizeof buf, "%d @%u.%01u", displaySpeed(rec.maxKmh, s_units), rec.toMaxCs / 100, rec.toMaxCs % 100 / 10);
         c.text(font_small, cx[5], y, buf, C(0xffffff));
         c.fillRect(8, y + 7, 304, 1, C(0x1c252d));
     }
-    if (log.count) {
+    if (n) {
         c.text(font_small, 12, 199, "BEST", C(T.good));
         for (int k = 0; k < 4; k++) {
             fmtCs(buf, sizeof buf, best[k]);

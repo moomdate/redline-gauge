@@ -49,6 +49,7 @@ DW_STRIP = [
     (5, 206, 28, 226, 70),    # checkered flag (LAP)
     (31, 208, 53, 221, 40),   # LAP
     (102, 208, 128, 221, 40), # BEST
+    (52, 110, 95, 125, 40),   # km/h (drawn by the firmware: km/h or mph)
 ]
 dw_clean = strip(dw, DW_STRIP)
 Image.fromarray(dw_clean).save("tools/art/datawave_plate.png")
@@ -71,6 +72,8 @@ RC_STRIP = [
     (46, 143, 74, 157, 50),   # BAT
     (13, 148, 43, 171, 70),   # battery
     (76, 156, 91, 174, 50),   # v
+    (164, 150, 206, 165, 40), # km/h (drawn by the firmware: km/h or mph)
+    (97, 197, 118, 207, 40),  # TRIP unit km (drawn: km or mi)
 ]
 rc_clean = strip(rc, RC_STRIP)
 Image.fromarray(rc_clean).save("tools/art/racecode_plate_slots.png")
