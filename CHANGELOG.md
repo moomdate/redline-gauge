@@ -4,15 +4,36 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
-## [Unreleased]
+## [2.0.0] - 2026-11-11
 
 ### Added
+- **Skins** (SETTINGS -> SKIN, serial `skin=default|datawave|race`): next to the original layout (DEFAULT),
+  - **DATA WAVE**: big speed + gear on the left, RPM and three value rows on the right, each with a scrolling
+    graph of its recent history.
+  - **RACE CODE**: a round rev dial whose segmented arc lights up with rpm (yellow -> orange -> red near the
+    redline), speed and RPM in the hub, gear below, three value tiles on the left.
+  Both skins' value slots are the same three panel items as DEFAULT: tap a slot to step to the next value the
+  source actually delivers (OBD BT car values or HONDA K bike values). Label, unit and icon follow the value.
+- **TRIP** distance (integrated from speed since power-on) on both new skins.
+- **Alerts** (SETTINGS -> ALERT): overheat, low battery and hot-intake warnings as a flashing banner + LED +
+  beep (repeats every 4 s), each with an adjustable threshold. Serial `alerts=on|off`.
+- **Honda model profile** (HONDA source -> MODEL, serial `hmodel=wave|giorno`): Wave 110i (air-cooled, OIL
+  TEMP, shift 8500) or Giorno / Lead (COOLANT, shift 9000).
 - **ENGINE LOAD panel** (`LOAD`, tap a right-hand panel): calculated engine load, OBD BT PID `0104`. Serial key `load=`.
 - **AFR over OBD BT**: PID `0134` (O2 sensor 1 equivalence ratio, lambda) x `OBD_AFR_STOICH` (14.7) feeds the
   existing AFR panel. On a car with a wideband (A/F) sensor this is a measurement; an inactive sensor (engine
   off, warming up) or a fuel cut reads about lambda 2.0 (29.4).
+- **mph speed units** (SETUP -> OPTIONS -> tap the KM/H / MPH toggle, or `units=kmh|mph`): the main speed
+  gauge and the drag timer's live / top speed read in mph; data stays km/h internally. Default km/h.
+  (The drag-timer milestones 0-100 / 0-200 stay km/h for now.)
 
 ### Changed
+- **THEME applies to the DEFAULT skin only** (the new skins use fixed artwork); the SKIN chip now sits left of
+  THEME in SETTINGS.
+- **HONDA K AFR** is only shown while the O2 sensor is switching (engine running, sensor warm); otherwise `--`
+  instead of a misleading number. The raw O2 voltage is always available.
+- **Thai UI**: panel labels translated, a smaller Thai font for small captions; numbers keep the Barlow font.
+- TOUCH and CUSTOM data sources are no longer offered on the settings page (still available over serial).
 - **OBD BT polls only what the three right-hand panels show.** RPM, speed and the hybrid values are always polled;
   the panel values (coolant, voltage, intake, throttle, fuel, trims, MAP, ignition, O2, AFR, load) only while a panel
   shows them, so the visible ones update more often. RPM is exactly every other request (a skipped entry used to
@@ -24,15 +45,6 @@ new features bump the middle number, fixes the last one.
   (800 rpm at 25 km/h can coincide with a tall gear) is ignored, and a new gear shows once it has been the
   estimate for 150 ms so one stale sample doesn't flicker it. N only when stopped. `GEAR_HOLD 0` restores
   the old behaviour (N whenever nothing fits).
-
-## [Unreleased]
-
-### Added
-- **mph speed units** (SETUP -> OPTIONS -> tap the KM/H / MPH toggle, or `units=kmh|mph`): the main speed
-  gauge and the drag timer's live / top speed read in mph; data stays km/h internally. Default km/h.
-  (The drag-timer milestones 0-100 / 0-200 stay km/h for now.)
-
-### Changed
 - **SETTINGS page redesign**: the on/off options (BEEP, GEAR, UNITS, PANELS, K-UART, RESET PEAK) moved into
   an OPTIONS zone of checkbox toggles, making room without crowding; themes, data source and shift RPM unchanged.
 
