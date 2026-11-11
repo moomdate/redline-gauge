@@ -8,7 +8,8 @@
 //   checksum: all bytes of the frame sum to 0 (mod 256)
 // Session (Wave 110i / 125i): wake pulse (K low 70 ms, high 130 ms) -> ping FE 04 72 8C
 //   (-> 0E 04 72 7C) -> init 72 05 00 F0 99 (-> 02 04 00 FA; some ECUs stay quiet)
-//   -> poll table 0x17: 72 05 71 17 01, and the O2 sensor in table 0x20: 72 05 71 20 F8
+//   -> find the main table (0x17 Wave, 0x11 / 0x10 / 0x13 others), e.g. 72 05 71 17 01,
+//      then poll it and the O2 sensor in table 0x20: 72 05 71 20 F8
 #include <stdint.h>
 #include <stddef.h>
 
@@ -42,29 +43,51 @@ inline bool hkIsTableReply(const uint8_t *f, size_t n, uint8_t table) {
     return hkFrameOk(f, n) && n >= 5 && f[0] == 0x02 && f[2] == 0x71 && f[3] == table;
 }
 
-// Only what the gauge shows; the bike's speedo is mechanical, the ECU has no speed.
+// Only what the gauge shows. hasX = false when the ECU sends FF ("no sensor") or the layout has no X.
 struct HondaData {
-    float rpm, tps, temp, iat, batt;
-    bool hasIat;                      // false when the bike has no intake air sensor
+    float rpm, tps, temp, iat, batt, map, speed;
+    bool hasTemp, hasIat, hasMap, hasSpeed;
 };
 
-// Table 0x17 on the Wave 110i / 125i ECU (payload = bytes after 02 <len> 71 17):
-//   [0-1] rpm  [2] TPS V*256/5  [3] TPS %*2  [4] engine temp sensor V  [5] engine temp +40
-//   [6] intake air sensor V  [7] intake air temp +40  [10] battery V*10
-//   [11-12] injector  [13] ignition   (the last two are not used)
-// Wave 100i: no intake air sensor, [6..9] read FF.
-inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) {
-    if (!hkIsTableReply(f, n, HK_TABLE) || n < 4 + 14 + 1) return false;   // 14 data bytes + checksum
+// Main live table, tried in this order at connect (the first that answers is kept).
+// Wave first asks 0x17 (checked on the bench and on a Wave 100i dump); other models start
+// with 0x11, the scooter (Lead / Giorno+ / PCX) table, as the reference gauge does.
+static const uint8_t HK_MAIN_ORDER_WAVE[]  = { 0x17, 0x11, 0x10, 0x13 };
+static const uint8_t HK_MAIN_ORDER_OTHER[] = { 0x11, 0x10, 0x17, 0x13 };
+
+// Decoding follows the table the ECU answered, not the bike model (docs: MOTORCYCLE_HONDA.md 2).
+// D[n] = reply byte n, payload p[k] = D[k+4].
+//                 0x11 / 0x10        0x13, 0x17 (D9 != FF)   0x17 with D9 = FF
+//   rpm           D4*256+D5          same                    same
+//   TPS           D7 x 0.5           same                    same
+//   engine temp   D9 - 40            same                    D13 - 40
+//   intake air    D11 - 40           same                    none
+//   MAP kPa       D13                same                    none
+//   battery       D16 / 10           D14 / 10                D14 / 10
+//   speed km/h    D17                none                    D19 if the reply is long enough
+// FF in a temperature / MAP byte = no sensor. Wave 100i (real dump): D10..D13 = FF -> no IAT / MAP.
+inline bool hkDecodeMain(const uint8_t *f, size_t n, uint8_t table, HondaData &d) {
+    if (!hkIsTableReply(f, n, table) || n < 4 + 14 + 1) return false;   // 14 data bytes + checksum
     const uint8_t *p = f + 4;
+    const size_t len = n - 5;                                            // data bytes
+    const bool wide  = table == 0x11 || table == 0x10;
+    const bool alt17 = table == 0x17 && p[5] == 0xFF;
     d.rpm = (float)(p[0] << 8 | p[1]);
     d.tps = p[3] * 0.5f;
     if (d.tps > 100) d.tps = 100;
-    d.temp = p[5] - 40.0f;
-    d.hasIat = p[6] != 0xFF || p[7] != 0xFF;
+    const uint8_t t = alt17 ? p[9] : p[5];
+    d.hasTemp = t != 0xFF;
+    d.temp = t - 40.0f;
+    d.hasIat = !alt17 && p[7] != 0xFF;
     d.iat = p[7] - 40.0f;
-    d.batt = p[10] / 10.0f;
+    d.hasMap = !alt17 && p[9] != 0xFF;
+    d.map = p[9];
+    d.batt = (wide ? p[12] : p[10]) / 10.0f;
+    d.hasSpeed = wide || (alt17 && len > 15);
+    d.speed = wide ? p[13] : (alt17 && len > 15) ? p[15] : 0;
     return true;
 }
+inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) { return hkDecodeMain(f, n, HK_TABLE, d); }
 
 // Table 0x20, O2 sensor: 02 08 71 20 <o2> <fuel trim, 0x80 = 0 %> 00 <cs>
 // (a Wave 100i sends exactly these 3 data bytes; a reply of another length is ignored).

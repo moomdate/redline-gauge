@@ -31,6 +31,9 @@ public:
     static void setUart(uint8_t u);
     static uint8_t uart();
     static bool ownsConsole();           // true while HONDA K holds UART0 (USB console is off)
+    // Bike profile hint: Wave asks main table 0x17 first, other models (Giorno+, Lead) 0x11 first.
+    // Used at the next connect.
+    static void setPreferWave(bool wave);
 
 private:
     enum State : uint8_t { S_WAKE, S_RUN, S_WAIT };
@@ -43,6 +46,7 @@ private:
     bool     o2On_ = true;             // false once the ECU proved it has no table 0x20
     uint8_t  o2Miss_ = 0;
     uint32_t lastO2_ = 0;
+    uint8_t  table_ = 0;               // main live table this ECU answered (0 = not found yet)
     uint16_t lastRpm_ = 0;             // from the last main-table reply, to gate the AFR estimate
     float    o2Min_ = 1, o2Max_ = 0;   // O2 swing over a window: tells closed loop from open loop
     uint32_t o2WinAt_ = 0;
@@ -52,6 +56,7 @@ private:
     void retryIn(uint32_t ms, State then, const char *msg);
     Idle waitIdle();                   // wait for the K-line to sit idle before a wake-up
     bool wake();                       // pulse + ping + init; true when the ECU answered
+    bool findTable();                  // first main table the ECU answers -> table_
     bool transact(const uint8_t *req, uint8_t n, uint32_t timeoutMs = 150);
     void dump();
     void pollO2();

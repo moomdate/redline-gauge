@@ -1005,6 +1005,47 @@ static void test_honda_kline_frames() {
     uint8_t s[] = { 0x02, 0x08, 0x71, 0x17, 0x05, 0xDC, 0x33, 0 };   // too short
     s[7] = hkChecksum(s, 7);
     TEST_ASSERT_FALSE(hkDecodeMain(s, sizeof s, d));
+
+    // Engine temp byte FF = no sensor: no temperature (was 215 C -> a false overheat alarm)
+    g[9] = 0xFF; g[18] = hkChecksum(g, 18);
+    // ...and on table 0x17 a D9 of FF means the other layout: temp in D13, no intake air / MAP
+    g[13] = 0x82; g[18] = hkChecksum(g, 18);                     // D13 = 0x82
+    TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));
+    TEST_ASSERT_FALSE(d.hasIat);
+    TEST_ASSERT_FALSE(d.hasMap);
+    TEST_ASSERT_TRUE(d.hasTemp);
+    TEST_ASSERT_EQUAL_FLOAT(90, d.temp);                         // D13 0x82 - 40
+    TEST_ASSERT_FALSE(d.hasSpeed);                               // 14 data bytes: no D19
+    g[13] = 0xFF; g[18] = hkChecksum(g, 18);
+    TEST_ASSERT_TRUE(hkDecodeMain(g, sizeof g, d));
+    TEST_ASSERT_FALSE(d.hasTemp);                                // both FF: no temperature at all
+
+    // Table 0x11 (Lead / Giorno+ / PCX): temp D9, intake D11, MAP D13, battery D16, speed D17
+    uint8_t t11[23] = { 0x02, 0x17, 0x71, 0x11,
+                        0x0B, 0xB8,             // D4-5  3000 rpm
+                        0x33, 0x28,             // D6-7  TPS 0x28 * 0.5 = 20
+                        0x50, 0x82,             // D9    90 C
+                        0x8F, 0x4B,             // D11   35 C
+                        0x5A, 0x41,             // D13   65 kPa
+                        0x00, 0x80,
+                        0x8B,                   // D16   13.9 V
+                        0x2A,                   // D17   42 km/h
+                        0, 0, 0, 0, 0 };
+    t11[22] = hkChecksum(t11, 22);
+    TEST_ASSERT_TRUE(hkDecodeMain(t11, sizeof t11, 0x11, d));
+    TEST_ASSERT_EQUAL_FLOAT(3000, d.rpm);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 20, d.tps);
+    TEST_ASSERT_TRUE(d.hasTemp);   TEST_ASSERT_EQUAL_FLOAT(90, d.temp);
+    TEST_ASSERT_TRUE(d.hasIat);    TEST_ASSERT_EQUAL_FLOAT(35, d.iat);
+    TEST_ASSERT_TRUE(d.hasMap);    TEST_ASSERT_EQUAL_FLOAT(65, d.map);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 13.9f, d.batt);
+    TEST_ASSERT_TRUE(d.hasSpeed);  TEST_ASSERT_EQUAL_FLOAT(42, d.speed);
+    TEST_ASSERT_FALSE(hkDecodeMain(t11, sizeof t11, 0x17, d));  // asked 0x17, got 0x11: rejected
+    // the Wave table keeps its own layout: battery D14, no speed
+    TEST_ASSERT_TRUE(hkDecodeMain(w100, sizeof w100, 0x17, d));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 11.6f, d.batt);
+    TEST_ASSERT_FALSE(d.hasSpeed);
+    TEST_ASSERT_FALSE(d.hasMap);
 }
 
 // ---- touch calibration --------------------------------------------------------------------------

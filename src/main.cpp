@@ -565,6 +565,7 @@ static void applySettings(const Settings &next, bool repaint) {
     timer_ui::setUnits(next.units);
     gauge_ui::setAlertsEnabled(next.alerts);
     gauge_ui::setTempIsOil(next.source == SRC_HONDA && next.hondaModel == HM_WAVE110);   // Wave = air-cooled (OIL TEMP)
+    HondaKSource::setPreferWave(next.hondaModel == HM_WAVE110);   // which main table to try first
     model.setAlertThresholds(next.alertCoolant, next.alertVoltLo / 10.0f, next.alertIat);
     if (next.lang != prev.lang) { i18n::set(next.lang); gauge_ui::invalidate(); }
     ObdSource::setShownItems(next.panelItem);
@@ -937,6 +938,7 @@ void setup() {
     timer_ui::setUnits(settings.units);
     gauge_ui::setAlertsEnabled(settings.alerts);
     gauge_ui::setTempIsOil(settings.source == SRC_HONDA && settings.hondaModel == HM_WAVE110);
+    HondaKSource::setPreferWave(settings.hondaModel == HM_WAVE110);
     model.setAlertThresholds(settings.alertCoolant, settings.alertVoltLo / 10.0f, settings.alertIat);
     i18n::set(settings.lang);
     ObdSource::setShownItems(settings.panelItem);

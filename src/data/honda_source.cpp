@@ -166,6 +166,25 @@ bool HondaKSource::transact(const uint8_t *req, uint8_t n, uint32_t timeoutMs) {
     return hkFrameOk(resp_, respLen_);
 }
 
+static volatile bool s_preferWave = true;
+void HondaKSource::setPreferWave(bool wave) { s_preferWave = wave; }
+
+bool HondaKSource::findTable() {
+    const uint8_t *order = s_preferWave ? HK_MAIN_ORDER_WAVE : HK_MAIN_ORDER_OTHER;
+    for (int i = 0; i < 4; i++) {
+        uint8_t req[5];
+        hkTableRequest(order[i], req);
+        HondaData d;
+        if (transact(req, 5, 300) && hkDecodeMain(resp_, respLen_, order[i], d)) {
+            table_ = order[i];
+            Serial.printf("[honda] main table 0x%02X (%u bytes)\n", table_, respLen_);
+            return true;
+        }
+    }
+    table_ = 0;
+    return false;
+}
+
 void HondaKSource::poll() {
     switch (state_) {
     case S_WAIT:
@@ -173,11 +192,12 @@ void HondaKSource::poll() {
         else delay(20);
         break;
 
-    case S_WAKE:
+    case S_WAKE: {
         bus::setLink(Link::Connecting, "K-LINE INIT");
         s_link.connecting("WAKE-UP");
         sawEcho_ = false;
-        if (wake()) {
+        const bool woke = wake();
+        if (woke && findTable()) {
             errors_ = 0;
             o2On_ = true;
             o2Miss_ = 0;
@@ -186,7 +206,11 @@ void HondaKSource::poll() {
             s_idle = idle_;
             s_link.live();
         } else {
-            if (idle_ == IDLE_STUCK_LOW && !sawEcho_) {
+            if (woke) {
+                Serial.println("[honda] ECU woke up but answered none of tables 0x17 / 0x11 / 0x10 / 0x13 "
+                               "(`kdump` lists what it does answer)");
+                retryIn(2500, S_WAKE, "NO TABLE");
+            } else if (idle_ == IDLE_STUCK_LOW && !sawEcho_) {
                 Serial.println("[honda] ECU didn't answer (K-line stays low: check 12 V on the board, "
                                "TX/RX swap, transceiver RX -> GPIO 22)");
                 retryIn(2500, S_WAKE, "K-LINE LOW");
@@ -198,25 +222,28 @@ void HondaKSource::poll() {
             }
         }
         break;
+    }
 
     case S_RUN: {
         if (dumpOn && millis() - lastDump_ >= 1000) { dump(); lastDump_ = millis(); }
         uint8_t req[5];
-        hkTableRequest(HK_TABLE, req);
+        hkTableRequest(table_, req);
         HondaData d;
-        if (transact(req, 5, 300) && hkDecodeMain(resp_, respLen_, d)) {
+        if (transact(req, 5, 300) && hkDecodeMain(resp_, respLen_, table_, d)) {
             lastRpm_ = d.rpm;                             // remembered so pollO2() can gate the AFR
             bus::publish(CH_RPM, d.rpm);
             bus::publish(CH_THROTTLE, d.tps);
-            bus::publish(CH_COOLANT, d.temp);
+            if (d.hasTemp) bus::publish(CH_COOLANT, d.temp);    // FF = no sensor: shows "--", no false alarm
             if (d.hasIat) bus::publish(CH_IAT, d.iat);
+            if (d.hasMap) bus::publish(CH_MAP, d.map);
+            if (d.hasSpeed) bus::publish(CH_SPEED, d.speed);
             bus::publish(CH_VOLTAGE, d.batt);
             errors_ = 0;
             bus::setLink(Link::Live, "");
             s_link.reply();
             pollO2();
         } else if (++errors_ >= 5) {
-            Serial.printf("[honda] no table 0x17 reply (%s), connecting again\n",
+            Serial.printf("[honda] no table 0x%02X reply (%s), connecting again\n", table_,
                           sawEcho_ ? "echo OK: wiring fine, ignition ON?" : "no echo: check TX/RX swap");
             retryIn(1500, S_WAKE, sawEcho_ ? "NO ECU" : "NO K-LINE");
         }
