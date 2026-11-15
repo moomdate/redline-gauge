@@ -4,6 +4,17 @@ Ready-to-flash images for every version are on the [Releases page](https://githu
 (one per panel type, see [how to flash](docs/release-flashing.md)). Versions follow [semver](https://semver.org):
 new features bump the middle number, fixes the last one.
 
+## [2.0.3] - 2026-11-15
+
+### Fixed
+- **HONDA K: AFR now shows on Wave 110i / 125i and Giorno+ / Lead.** The gauge only asked the O2 sensor in table
+  `0x20`, which these ECUs don't answer, so AFR stayed blank. The O2 table now follows the main table the ECU
+  answered: the long `0x17` layout (Wave 100i) keeps `0x20`; the short `0x17` layout and `0x11` / `0x10` / `0x13`
+  read the O2 sensor from table `0xD0` (D16, 0-1.25 V). If that table stays silent the other one is tried.
+  Not yet checked on a real Wave 110i / Giorno+: `kdump` shows table `0xD0` if the reading looks wrong.
+- AFR no longer blinks to "--" every 4 s while the O2 sensor is switching; an O2 byte of FF in table `0x20` now
+  means "no sensor".
+
 ## [2.0.2] - 2026-11-11
 
 ### Added
