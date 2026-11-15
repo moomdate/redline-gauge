@@ -177,7 +177,8 @@ bool HondaKSource::findTable() {
         HondaData d;
         if (transact(req, 5, 300) && hkDecodeMain(resp_, respLen_, order[i], d)) {
             table_ = order[i];
-            Serial.printf("[honda] main table 0x%02X (%u bytes)\n", table_, respLen_);
+            o2Table_ = hkO2TableFor(table_, resp_, respLen_);
+            Serial.printf("[honda] main table 0x%02X (%u bytes), O2 table 0x%02X\n", table_, respLen_, o2Table_);
             return true;
         }
     }
@@ -200,6 +201,7 @@ void HondaKSource::poll() {
         if (woke && findTable()) {
             errors_ = 0;
             o2On_ = true;
+            o2Tried2_ = false;
             o2Miss_ = 0;
             state_ = S_RUN;
             s_echo = sawEcho_;
@@ -253,29 +255,38 @@ void HondaKSource::poll() {
     }
 }
 
-// O2 sensor (table 0x20) every 250 ms, between two main-table reads. An ECU that never
-// answers it (3 misses before the first answer) has no O2 table: stop asking. Misses don't
+// O2 sensor every 250 ms, between two main-table reads, from table 0x20 or 0xD0 (picked at
+// connect, hkO2TableFor). When that table stays silent (3 misses before the first answer) the
+// other one is tried; an ECU that answers neither has no O2 sensor: stop asking. Misses don't
 // count against the link - the main table decides when to reconnect.
 void HondaKSource::pollO2() {
     if (!o2On_ || millis() - lastO2_ < 250) return;
     lastO2_ = millis();
     uint8_t req[5], raw;
-    hkTableRequest(HK_TABLE_O2, req);
+    hkTableRequest(o2Table_, req);
     delay(20);                                         // gap between messages
-    if (transact(req, 5, 150) && hkDecodeO2(resp_, respLen_, raw)) {
-        float volts = hkO2Volts(raw);
+    const bool d0 = o2Table_ == HK_TABLE_O2_D0;
+    if (transact(req, 5, 150) &&
+        (d0 ? hkDecodeO2D0(resp_, respLen_, raw) : hkDecodeO2(resp_, respLen_, raw))) {
+        float volts = d0 ? hkO2VoltsD0(raw) : hkO2Volts(raw);
         bus::publish(CH_O2_MV, volts * 1000.0f);         // raw sensor volts: always valid to show
         o2Miss_ = 0;
         s_link.reply();
         s_o2Volts = volts;
         s_hasO2 = true;
 
-        // Track the O2 swing over ~4 s. A narrowband sensor only means anything while it is
-        // switching about 0.45 V (closed loop); pegged = open loop (cold engine or full throttle).
-        if (millis() - o2WinAt_ > 4000) { o2WinAt_ = millis(); o2Min_ = o2Max_ = volts; }
+        // Track the O2 swing over ~4 s windows. A narrowband sensor only means anything while it
+        // is switching about 0.45 V (closed loop); pegged = open loop (cold engine or full
+        // throttle). The last full window counts too, so a fresh window doesn't blank the AFR.
+        if (millis() - o2WinAt_ > 4000) {
+            o2PrevSwing_ = o2Max_ - o2Min_;
+            o2WinAt_ = millis();
+            o2Min_ = o2Max_ = volts;
+        }
         if (volts < o2Min_) o2Min_ = volts;
         if (volts > o2Max_) o2Max_ = volts;
-        bool switching = (o2Max_ - o2Min_) >= 0.08f;
+        const float swing = o2Max_ - o2Min_ > o2PrevSwing_ ? o2Max_ - o2Min_ : o2PrevSwing_;
+        bool switching = swing >= 0.08f;
 
         // Publish AFR only when it is meaningful: above idle and while the sensor is switching.
         // Otherwise leave CH_AFR to go stale so the panel shows "--", not a wrong number.
@@ -285,11 +296,17 @@ void HondaKSource::pollO2() {
             s_afr = afr;
         }
     } else if (++o2Miss_ >= 3) {
-        if (!s_hasO2) {
-            o2On_ = false;
-            Serial.println("[honda] no O2 table 0x20 on this ECU: AFR off");
-        }
         o2Miss_ = 0;
+        if (s_hasO2) return;
+        if (!o2Tried2_) {
+            o2Tried2_ = true;
+            const uint8_t other = d0 ? HK_TABLE_O2 : HK_TABLE_O2_D0;
+            Serial.printf("[honda] no O2 in table 0x%02X, trying 0x%02X\n", o2Table_, other);
+            o2Table_ = other;
+        } else {
+            o2On_ = false;
+            Serial.println("[honda] no O2 in table 0x20 or 0xD0 on this ECU: AFR off");
+        }
     }
 }
 

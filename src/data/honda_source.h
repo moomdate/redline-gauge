@@ -4,7 +4,7 @@
 //   transceiver RX-out -> GPIO 22      CYD GPIO 27 -> transceiver TX-in
 //   logic VCC <- 3.3 V (never 5 V on GPIO 22)    bike side: K-line, GND, +12 V switched
 // Same blocking state machine style as ObdSource:
-//   wake pulse -> ping -> init -> poll table 0x17 (+ the O2 table 0x20 four times a second)
+//   wake pulse -> ping -> init -> poll table 0x17 (+ the O2 table 0x20 or 0xD0 four times a second)
 // Shows rpm, throttle, engine temp, battery and the AFR estimated from the O2 sensor.
 // Lost link: a new wake-up every 2.5 s; linkStatus() tells the UI where it stands.
 // Serial `kdump` toggles a raw dump of every known table once a second (with the bytes
@@ -43,13 +43,16 @@ private:
     uint8_t  errors_ = 0;
     bool     sawEcho_ = false;
     Idle     idle_ = IDLE_OK;          // K-line state seen before the last wake-up
-    bool     o2On_ = true;             // false once the ECU proved it has no table 0x20
+    bool     o2On_ = true;             // false once the ECU answered neither O2 table
+    uint8_t  o2Table_ = 0x20;          // O2 table in use: 0x20 or 0xD0 (hkO2TableFor)
+    bool     o2Tried2_ = false;        // already fell back to the other O2 table
     uint8_t  o2Miss_ = 0;
     uint32_t lastO2_ = 0;
     uint8_t  table_ = 0;               // main live table this ECU answered (0 = not found yet)
     uint16_t lastRpm_ = 0;             // from the last main-table reply, to gate the AFR estimate
     float    o2Min_ = 1, o2Max_ = 0;   // O2 swing over a window: tells closed loop from open loop
     uint32_t o2WinAt_ = 0;
+    float    o2PrevSwing_ = 0;         // swing of the last full window (no gap when a window restarts)
     uint8_t  resp_[64];
     uint8_t  respLen_ = 0;
 

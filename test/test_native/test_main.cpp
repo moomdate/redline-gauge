@@ -821,6 +821,40 @@ static void test_honda_o2_afr() {
     uint8_t t17[] = { 0x02, 0x08, 0x71, 0x17, 0xC3, 0x80, 0x00, 0 };
     t17[7] = hkChecksum(t17, 7);
     TEST_ASSERT_FALSE(hkDecodeO2(t17, sizeof t17, raw));
+    // FF = no sensor
+    uint8_t ff[] = { 0x02, 0x08, 0x71, 0x20, 0xFF, 0x80, 0x00, 0 };
+    ff[7] = hkChecksum(ff, 7);
+    TEST_ASSERT_FALSE(hkDecodeO2(ff, sizeof ff, raw));
+}
+
+static void test_honda_o2_d0() {
+    uint8_t req[5];
+    hkTableRequest(HK_TABLE_O2_D0, req);
+    TEST_ASSERT_EQUAL_HEX8(0x48, req[4]);                            // 72 05 71 D0 48
+    // 0xD0 reply with 13 data bytes: O2 in D16 (p[12]) on a 1.25 V scale
+    uint8_t d0[18] = { 0x02, 18, 0x71, 0xD0 };
+    for (int i = 4; i < 17; i++) d0[i] = 0x11;
+    d0[16] = 0x5C;                                                   // 92 -> 0.45 V
+    d0[17] = hkChecksum(d0, 17);
+    uint8_t raw = 0;
+    TEST_ASSERT_TRUE(hkDecodeO2D0(d0, sizeof d0, raw));
+    TEST_ASSERT_EQUAL_HEX8(0x5C, raw);
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.45f, hkO2VoltsD0(raw));
+    TEST_ASSERT_FLOAT_WITHIN(0.01f, 1.25f, hkO2VoltsD0(0xFF));
+    // a short 0xD0 reply (6 data bytes) carries no O2
+    uint8_t shortD0[] = { 0x02, 0x0B, 0x71, 0xD0, 1, 2, 3, 4, 5, 6, 0 };
+    shortD0[10] = hkChecksum(shortD0, 10);
+    TEST_ASSERT_FALSE(hkDecodeO2D0(shortD0, sizeof shortD0, raw));
+    TEST_ASSERT_FALSE(hkDecodeO2(d0, sizeof d0, raw));               // wrong table for 0x20
+
+    // O2 table from the main table: only the long 0x17 layout uses 0x20
+    uint8_t f17[20] = { 0x02, 20, 0x71, 0x17 };
+    f17[9] = 0x78;
+    TEST_ASSERT_EQUAL_HEX8(0x20, hkO2TableFor(0x17, f17, sizeof f17));
+    f17[9] = 0xFF;                                                   // Wave 110i short layout
+    TEST_ASSERT_EQUAL_HEX8(0xD0, hkO2TableFor(0x17, f17, sizeof f17));
+    TEST_ASSERT_EQUAL_HEX8(0xD0, hkO2TableFor(0x11, f17, sizeof f17));
+    TEST_ASSERT_EQUAL_HEX8(0xD0, hkO2TableFor(0x13, f17, sizeof f17));
 }
 
 static void test_afr_panel() {
@@ -1431,6 +1465,7 @@ int main(int, char **) {
     RUN_TEST(test_obd_hybrid_pids);
     RUN_TEST(test_honda_kline_frames);
     RUN_TEST(test_honda_o2_afr);
+    RUN_TEST(test_honda_o2_d0);
     RUN_TEST(test_afr_panel);
     RUN_TEST(test_obd_polls_only_shown_items);
     RUN_TEST(test_extra_panel_items_are_selectable);

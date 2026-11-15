@@ -9,7 +9,8 @@
 // Session (Wave 110i / 125i): wake pulse (K low 70 ms, high 130 ms) -> ping FE 04 72 8C
 //   (-> 0E 04 72 7C) -> init 72 05 00 F0 99 (-> 02 04 00 FA; some ECUs stay quiet)
 //   -> find the main table (0x17 Wave, 0x11 / 0x10 / 0x13 others), e.g. 72 05 71 17 01,
-//      then poll it and the O2 sensor in table 0x20: 72 05 71 20 F8
+//      then poll it and the O2 sensor: table 0x20 (72 05 71 20 F8) or table 0xD0 (72 05 71 D0 48),
+//      picked from the main table layout (hkO2TableFor)
 #include <stdint.h>
 #include <stddef.h>
 
@@ -17,6 +18,7 @@ static const uint8_t HK_PING[] = { 0xFE, 0x04, 0x72, 0x8C };
 static const uint8_t HK_INIT[] = { 0x72, 0x05, 0x00, 0xF0, 0x99 };
 static const uint8_t HK_TABLE = 0x17;
 static const uint8_t HK_TABLE_O2 = 0x20;
+static const uint8_t HK_TABLE_O2_D0 = 0xD0;
 
 inline uint8_t hkChecksum(const uint8_t *b, size_t n) {
     uint8_t s = 0;
@@ -91,10 +93,29 @@ inline bool hkDecodeMain(const uint8_t *f, size_t n, HondaData &d) { return hkDe
 
 // Table 0x20, O2 sensor: 02 08 71 20 <o2> <fuel trim, 0x80 = 0 %> 00 <cs>
 // (a Wave 100i sends exactly these 3 data bytes; a reply of another length is ignored).
+// FF = no sensor.
 inline bool hkDecodeO2(const uint8_t *f, size_t n, uint8_t &o2Raw) {
-    if (!hkIsTableReply(f, n, HK_TABLE_O2) || n != 4 + 3 + 1) return false;
+    if (!hkIsTableReply(f, n, HK_TABLE_O2) || n != 4 + 3 + 1 || f[4] == 0xFF) return false;
     o2Raw = f[4];
     return true;
+}
+
+// Table 0xD0, the O2 sensor on ECUs without a usable table 0x20 (Wave 110i / 125i with the
+// short 0x17 layout, 0x11 / 0x10 / 0x13 scooters): 02 <len >= 18> 71 D0 <data...> <cs>,
+// O2 in D16 = p[12] on a 0..1.25 V scale (hkO2VoltsD0). Shorter replies carry no O2.
+inline bool hkDecodeO2D0(const uint8_t *f, size_t n, uint8_t &o2Raw) {
+    if (!hkIsTableReply(f, n, HK_TABLE_O2_D0) || n < 18) return false;
+    o2Raw = f[16];
+    return true;
+}
+inline float hkO2VoltsD0(uint8_t raw) { return raw * 1.25f / 255.0f; }
+
+// Which table carries the O2 sensor, from the main table the ECU answered and its first
+// reply: only the long 0x17 layout (D9 != FF) has it in 0x20, the rest in 0xD0.
+// The other one is tried when this one stays silent.
+inline uint8_t hkO2TableFor(uint8_t mainTable, const uint8_t *f, size_t n) {
+    if (mainTable == 0x17 && n > 9 && f[9] != 0xFF) return HK_TABLE_O2;
+    return HK_TABLE_O2_D0;
 }
 
 // O2 sensor volts. A Wave 100i at idle swings between 0x12 and 0xC3: 0.07 / 0.76 V on a
