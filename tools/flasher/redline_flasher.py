@@ -4,12 +4,11 @@
 Windows / macOS / Linux. A small window (or `--cli` in a terminal) that:
   * lists serial ports and pre-selects the CYD's USB chip (CH340, else CP210x / other ESP32 bridges)
   * downloads the chosen version from GitHub Releases, or uses a local .bin you pick
-  * flashes it with esptool (first install = factory image at 0x0, update = app at 0x10000,
-    which keeps the board's settings and run log)
+  * always flashes a factory / merged image at 0x0, resetting settings and the run log
 
     python redline_flasher.py                       # window
     python redline_flasher.py --cli                 # interactive terminal prompts
-    python redline_flasher.py --cli --port COM5 --variant invert --mode update --version latest -y
+    python redline_flasher.py --cli --port COM5 --variant noinvert --spi 40 --version latest -y
 """
 import argparse
 import json
@@ -19,29 +18,27 @@ import tempfile
 import threading
 import urllib.request
 
-import serial.tools.list_ports
-
 REPO = "moomdate/redline-gauge"
 API = f"https://api.github.com/repos/{REPO}/releases"
 # Panel colours only set the starting point: from v1.6.2 SETUP -> COLORS flips them on the
 # board (saved), so a wrong pick is fixed with one tap. The -dim builds add BRIGHTNESS.
 VARIANTS = {
-    "invert": "Most CYD boards (start here)",
-    "noinvert": "Panels that show a white background with 'invert'",
-    "invert-dim": "Like invert + BRIGHTNESS control",
-    "noinvert-dim": "Like noinvert + BRIGHTNESS control",
+    "noinvert": "ILI9341: TPM408-2.8 / H1954 5-4 (default)",
+    "cyd-st7789": "ST7789: H685",
+    "invert": "ILI9341: only if colours look negative; SETUP -> COLORS also fixes this",
+    "noinvert-dim": "ILI9341: TPM408-2.8 / H1954 5-4 + BRIGHTNESS",
+    "invert-dim": "ILI9341 + BRIGHTNESS: only for negative colours (or SETUP -> COLORS)",
 }
-# Display bus speed. 80 MHz is the fast default; some CYD panels show shifted / torn
-# pictures at 80 and need 40 (still 60 fps). The 40 MHz images exist from v1.6.5.
+# 40 MHz is the safe starting point; some panels distort at 80 MHz.
 SPEEDS = {
-    "80": "80 MHz - fast (default)",
-    "40": "40 MHz - safe: pick this if the picture glitches / tears",
+    "40": "40 MHz - safe (default)",
+    "80": "80 MHz - faster bus; may distort the picture",
 }
+IMAGE_AVAILABILITY = (
+    "invert-dim from v1.3.0, noinvert-dim from v1.4.1, ILI9341 40 MHz from v1.6.5; "
+    "ST7789 from v1.9.1, ST7789 40 MHz from v1.9.2 (display fix in v1.9.3)"
+)
 
-MODES = {
-    "factory": ("0x0", "First install - erases settings and run log"),
-    "update": ("0x10000", "Update - keeps settings and run log"),
-}
 # USB-serial chips found on ESP32 boards, best guess first. The CYD uses a CH340.
 KNOWN_USB = [
     ((0x1A86, 0x7523), "CH340 (CYD)"),
@@ -68,6 +65,7 @@ def port_label(p):
 
 def list_ports():
     """Serial ports, the most likely ESP32 board first."""
+    import serial.tools.list_ports
     ports = [p for p in serial.tools.list_ports.comports()
              if "Bluetooth" not in p.device and "debug-console" not in p.device and "wlan" not in p.device]
     usb = [p for p in ports if p.vid]          # Bluetooth / virtual ports have no USB id
@@ -83,9 +81,9 @@ def fetch_releases():
     return [r for r in rels if not r.get("draft")]
 
 
-def asset_for(release, variant, mode, spi="80"):
+def asset_for(release, variant, spi="40"):
     tag = release["tag_name"]
-    name = f"redline-{tag}-{variant}{'-spi40' if spi == '40' else ''}-{mode}.bin"
+    name = f"redline-{tag}-{variant}{'-spi40' if spi == '40' else ''}-factory.bin"
     for a in release.get("assets", []):
         if a["name"] == name:
             return a
@@ -103,9 +101,26 @@ def download(url, log):
 
 
 # ---- flashing --------------------------------------------------------------------------------
-def flash(port, path, mode, log, baud=460800):
+def validate_factory_image(path):
+    """Require the ESP32 merged layout at 0x0, regardless of the filename."""
+    with open(path, "rb") as f:
+        header = f.read(0x10001)
+    if (header[:1] == b"\xe9" or header[0x1000:0x1001] != b"\xe9"
+            or header[0x8000:0x8002] != b"\xaa\x50"
+            or header[0x10000:0x10001] != b"\xe9"):
+        raise ValueError(
+            "Use a -factory.bin or merged ESP32 image built for 0x0, containing the "
+            "bootloader, partition table and app. App-only / -update.bin images are not "
+            "supported: they can leave the stock 1 MB partition table and cause a "
+            "black-screen boot loop. Renaming the file does not convert it."
+        )
+
+
+def flash(port, path, log, baud=460800):
+    validate_factory_image(path)
     import esptool
-    addr = MODES[mode][0]
+    addr = "0x0"
+    log("Factory flash at 0x0: resets settings and the run log.")
     args = ["--chip", "esp32", "--port", port, "--baud", str(baud), "--before", "default_reset",
             "--after", "hard_reset", "write_flash", "-z", addr, path]
     log(f"esptool {' '.join(args)}")
@@ -157,8 +172,6 @@ def cli(a):
                             variants[pick("Panel type", [f"{k:11s} {v}" for k, v in VARIANTS.items()])])
     speeds = list(SPEEDS)
     spi = a.spi or (speeds[0] if a.yes else speeds[pick("Display speed", list(SPEEDS.values()))])
-    modes = list(MODES)
-    mode = a.mode or (modes[1] if a.yes else modes[pick("Install type", [f"{k:8s} {v[1]}" for k, v in MODES.items()], 1)])
 
     if a.file:
         path = a.file
@@ -176,16 +189,19 @@ def cli(a):
         else:
             print("Version:")
             rel = rels[pick("Version", [r["tag_name"] for r in rels])]
-        asset = asset_for(rel, variant, mode, spi)
+        asset = asset_for(rel, variant, spi)
         if not asset:
-            sys.exit(f"{rel['tag_name']} has no '{variant}' {spi} MHz image (invert-dim from v1.3.0, "
-                     "noinvert-dim from v1.4.1, 40 MHz images from v1.6.5).")
+            sys.exit(f"{rel['tag_name']} has no '{variant}' {spi} MHz factory image ({IMAGE_AVAILABILITY}).")
         path = download(asset["browser_download_url"], log)
 
-    print(f"\nFlash {os.path.basename(path)} to {port} at {MODES[mode][0]}.")
+    try:
+        validate_factory_image(path)
+    except (OSError, ValueError) as e:
+        sys.exit(str(e))
+    print(f"\nFlash {os.path.basename(path)} to {port} at 0x0. Resets settings and the run log.")
     if not a.yes and input("Go? [Y/n]: ").strip().lower() not in ("", "y", "yes"):
         sys.exit("Cancelled.")
-    flash(port, path, mode, log, a.baud)
+    flash(port, path, log, a.baud)
 
 
 # ---- window ------------------------------------------------------------------------------------
@@ -220,10 +236,9 @@ def gui(a):
     frm.columnconfigure(1, weight=1)
 
     ports, releases = [], []
-    port_var, ver_var, var_var, mode_var, file_var, spi_var = (tk.StringVar() for _ in range(6))
-    var_var.set("invert")
-    spi_var.set("80")
-    mode_var.set("update")
+    port_var, ver_var, var_var, file_var, spi_var = (tk.StringVar() for _ in range(5))
+    var_var.set(a.variant or "noinvert")
+    spi_var.set(a.spi or "40")
 
     def log(msg):
         def add():
@@ -255,10 +270,6 @@ def gui(a):
         p = filedialog.askopenfilename(filetypes=[("Firmware", "*.bin"), ("All files", "*.*")])
         if p:
             file_var.set(p)
-            if p.endswith("-factory.bin"):
-                mode_var.set("factory")
-            elif p.endswith("-update.bin"):
-                mode_var.set("update")
 
     def start():
         sel = port_box.current()
@@ -276,12 +287,12 @@ def gui(a):
                     rel = next((r for r in releases if r["tag_name"] == tag), None)
                     if not rel:
                         raise RuntimeError("Pick a version (or a local .bin).")
-                    asset = asset_for(rel, var_var.get(), mode_var.get(), spi_var.get())
+                    asset = asset_for(rel, var_var.get(), spi_var.get())
                     if not asset:
                         raise RuntimeError(f"{rel['tag_name']} has no '{var_var.get()}' {spi_var.get()} MHz image "
-                                           "(40 MHz images exist from v1.6.5).")
+                                           f"({IMAGE_AVAILABILITY}).")
                     path = download(asset["browser_download_url"], log)
-                flash(port, path, mode_var.get(), log, a.baud)
+                flash(port, path, log, a.baud)
             except SystemExit as e:                # esptool exits on fatal errors
                 log(f"Failed ({e}). Check the port; hold BOOT while it connects if it keeps failing.")
             except Exception as e:
@@ -312,11 +323,8 @@ def gui(a):
     for k, v in SPEEDS.items():
         ttk.Radiobutton(sf, text=v, value=k, variable=spi_var).pack(anchor="w")
     r += 1
-    ttk.Label(frm, text="Install").grid(row=r, column=0, sticky="nw", pady=3)
-    mf = ttk.Frame(frm)
-    mf.grid(row=r, column=1, columnspan=2, sticky="w", padx=6)
-    for k, (_, v) in MODES.items():
-        ttk.Radiobutton(mf, text=f"{k}  -  {v}", value=k, variable=mode_var).pack(anchor="w")
+    ttk.Label(frm, text="Factory at 0x0 — resets settings and the run log.").grid(
+        row=r, column=0, columnspan=3, sticky="w", pady=3)
     r += 1
     ttk.Label(frm, text="Local file").grid(row=r, column=0, sticky="w", pady=3)
     ttk.Entry(frm, textvariable=file_var).grid(row=r, column=1, sticky="ew", padx=6)
@@ -330,7 +338,7 @@ def gui(a):
     frm.rowconfigure(r, weight=1)
 
     refresh_ports()
-    log("Panel: pick any; wrong colours (white background) after flashing? Tap SETUP -> COLORS (v1.6.2+).")
+    log("Match the panel marking; start at 40 MHz. Negative colours? Tap SETUP -> COLORS (v1.6.2+).")
     if a.selftest:                                  # CI: build the window, then close it
         root.after(1500, root.destroy)
     else:
@@ -339,19 +347,22 @@ def gui(a):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Flash REDLINE onto a CYD board.")
+    ap = argparse.ArgumentParser(description="Flash REDLINE factory images at 0x0. Resets settings and the run log.")
     ap.add_argument("--cli", action="store_true", help="terminal prompts instead of a window")
     ap.add_argument("--port", help="serial port, e.g. COM5 or /dev/ttyUSB0 (default: auto)")
-    ap.add_argument("--variant", choices=list(VARIANTS))
-    ap.add_argument("--mode", choices=list(MODES))
-    ap.add_argument("--spi", choices=list(SPEEDS), help="display bus MHz: 80 (fast) or 40 (safe)")
+    ap.add_argument("--variant", choices=list(VARIANTS), help="panel variant (default: noinvert)")
+    ap.add_argument("--mode", choices=["factory", "update"],
+                    help="deprecated, ignored: update is gone; always factory at 0x0")
+    ap.add_argument("--spi", choices=list(SPEEDS), help="display bus MHz: 40 (default, safe) or 80")
     ap.add_argument("--version", help="release tag, e.g. v1.4.0, or 'latest'")
-    ap.add_argument("--file", help="flash a local .bin instead of downloading")
+    ap.add_argument("--file", help="local factory / merged .bin for 0x0 (app-only images refused)")
     ap.add_argument("--baud", type=int, default=460800)
     ap.add_argument("--list-ports", action="store_true", help="print serial ports and exit")
     ap.add_argument("-y", "--yes", action="store_true", help="no questions: auto port, defaults")
     ap.add_argument("--selftest", action="store_true", help=argparse.SUPPRESS)
     a = ap.parse_args()
+    if a.mode:
+        print("Note: --mode is ignored; update is gone. Always factory at 0x0; resets settings and the run log.")
     if a.selftest:
         import esptool                              # bundled? (PyInstaller check)
         print("esptool", esptool.__version__, "| ports:", [p.device for p in list_ports()])

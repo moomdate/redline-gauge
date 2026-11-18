@@ -26,7 +26,17 @@
 ## ดาวน์โหลดไฟล์พร้อมแฟลช (ไม่ต้องคอมไพล์)
 
 ไฟล์ `.bin` ของทุกเวอร์ชันอยู่ที่ **[หน้า Releases](https://github.com/moomdate/redline-gauge/releases)** มีให้ครบทุกแบบจอ
-(`invert` = ส่วนใหญ่, `noinvert` = จอสีกลับด้าน, `invert-dim` = บอร์ดที่หรี่ไฟจอได้)
+ลงใหม่หรืออัปเกรด ใช้ **factory ที่ 0x0** ทุกครั้ง **ค่าที่ตั้งไว้และประวัติการวิ่งจะถูกล้าง**
+- ILI9341 รหัส **TPM408-2.8 / H1954 5-4**: เริ่มด้วย `redline-vX.Y.Z-noinvert-spi40-factory.bin`
+- ST7789 รหัส **H685**: เริ่มด้วย `redline-vX.Y.Z-cyd-st7789-spi40-factory.bin`
+
+ค่าเริ่มต้นของโปรแกรมคือ **noinvert / 40 MHz** ถ้าสีกลับเหมือนฟิล์มเนกาทีฟ กด **SETUP → COLORS** หรือใช้ `invert`
+ST7789 เริ่มมีใน v1.9.1 และรุ่น 40 MHz ใน v1.9.2 แนะนำ v1.9.3 ขึ้นไปที่แก้ปัญหาจอแล้ว
+
+ไฟล์ app-only ที่ `0x10000` ไม่เปลี่ยนตารางพาร์ทิชันเดิม ถ้าช่องแอปมีแค่ 1 MB จะจอดำและรีสตาร์ทวน
+log จะขึ้น `Image length 2372128 doesn't fit in partition length 1048576`
+แก้โดยแฟลช **factory ที่ 0x0** ให้ตรงรุ่นจอ
+
 ง่ายสุดใช้ **REDLINE Flasher** (`REDLINE-Flasher-windows.exe`, มีของ macOS/Linux ด้วย) ในหน้าเดียวกัน — เปิดแล้วมันหาบอร์ด โหลดเวอร์ชันที่เลือก และแฟลชให้เอง
 หรือแฟลชผ่านเบราว์เซอร์ที่ [esptool-js](https://espressif.github.io/esptool-js/) — ดู[วิธีเลือกไฟล์และแฟลช](docs/release-flashing.md)
 · อะไรเปลี่ยนในแต่ละเวอร์ชัน: [CHANGELOG.md](CHANGELOG.md)
@@ -35,14 +45,18 @@
 
 ```bash
 ls /dev/cu.*                     # หาพอร์ต (เลขเปลี่ยนทุกครั้งที่เสียบคนละช่อง)
-~/.platformio/penv/bin/pio run -e esp32dev -t upload --upload-port /dev/cu.usbserial-XXXX
+~/.platformio/penv/bin/pio run -e cyd-noinvert-spi40 -t upload --upload-port /dev/cu.usbserial-XXXX
 ~/.platformio/penv/bin/pio device monitor     # ดู log ที่ 115200
 ```
 
+`pio run -t upload` เขียน bootloader + ตารางพาร์ทิชัน + แอปให้ครบ ใช้กับบอร์ดใหม่ได้เลย
+อย่าเอา `.pio/build/<env>/firmware.bin` ไปแฟลชเดี่ยว ๆ ที่ 0x10000 เพราะมีแค่แอป (จอดำแบบข้างบน)
+
 | env | ใช้เมื่อ |
 |---|---|
-| `esp32dev` | จอที่ต้อง invert สี (บอร์ดตัวแรก) |
-| `cyd-noinvert` | จอสีปกติ — ถ้าแฟลชแล้วสีกลับ (พื้นดำกลายเป็นขาว) ให้ใช้ตัวนี้ |
+| `cyd-noinvert-spi40` | ILI9341 รหัส TPM408-2.8 / H1954 5-4 เริ่มด้วยตัวนี้ |
+| `cyd-st7789-spi40` | ST7789 รหัส H685 |
+| `esp32dev` | ILI9341 แบบ invert ที่ 80 MHz ใช้เมื่อสีกลับ หรือกด SETUP → COLORS |
 
 ---
 

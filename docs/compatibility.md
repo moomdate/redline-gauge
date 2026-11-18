@@ -169,3 +169,20 @@ REDLINE ไม่ได้อ่านคำสั่งเฉพาะยี่
 ---
 
 รถ K-Line รุ่นเก่า (Vigo ช่วงแรก, Vios/City รุ่นเก่า) ต่อผ่าน ELM327 ได้อยู่แล้ว (ช้ากว่า CAN) · แผนอ่านตรงผ่านบอร์ด K-Line โดยไม่ใช้ ELM327: [kline-car-notes.md](kline-car-notes.md)
+
+## CYD boards / รุ่นจอ
+
+เลือกจากรหัสบนกระจกจอ ไม่ใช่จำนวนช่อง USB · Identify the panel by its glass marking.
+
+| Marking / รหัสจอ | Controller | Build / env | Display SPI |
+|---|---|---|---|
+| TPM408-2.8 | ILI9341 | `cyd-noinvert-spi40` | 40 MHz |
+| **H1954 5-4** (bottom-right glass edge / ขอบกระจกขวาล่าง) | **ILI9341** | **`cyd-noinvert-spi40`** | **40 MHz** |
+| H685 | ST7789 | `cyd-st7789-spi40` | 40 MHz |
+
+H1954 5-4 was verified on a real board on 2026-11-18: `noinvert` at 40 MHz works;
+`invert` produces negative colours, ST7789 a white screen, and 80 MHz distorts the picture.
+ทดสอบ H1954 5-4 แล้ว ใช้ noinvert / 40 MHz ได้ ถ้าสีกลับ แก้ได้ที่ SETUP → COLORS
+
+For first installs and upgrades, use the matching **factory image at 0x0**; settings and the run log are reset.
+See [flashing instructions and boot-loop recovery](release-flashing.md).

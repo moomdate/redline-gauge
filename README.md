@@ -36,21 +36,34 @@ OBD-II Bluetooth, USB serial, or your own sensors.
 ## Download (no compiling)
 
 Ready-to-flash `.bin` files for every version are on the **[Releases page](https://github.com/moomdate/redline-gauge/releases)**,
-one per panel type (`invert` / `noinvert` / `invert-dim`). Easiest: **REDLINE Flasher**
+with images for ILI9341 and ST7789 panels. Easiest: **REDLINE Flasher**
 (`REDLINE-Flasher-windows.exe`, also macOS / Linux) on the same page: it finds the board, downloads the
 version you pick and flashes it. Or flash from the browser with [esptool-js](https://espressif.github.io/esptool-js/).
-See [which file and how](docs/release-flashing.md).
+Always use a **factory image at 0x0**, for first installs and upgrades; this **resets settings and the run log**.
+Start with `noinvert-spi40-factory.bin` for ILI9341 (**TPM408-2.8 / H1954 5-4**), or
+`cyd-st7789-spi40-factory.bin` for ST7789 (**H685**), with the release prefix `redline-vX.Y.Z-`.
+The flasher defaults to **noinvert / 40 MHz**. Use `invert` only for negative-looking colours;
+**SETUP → COLORS** also fixes them. ST7789 starts at v1.9.1, its 40 MHz build at v1.9.2;
+use v1.9.3+ for the display fix.
+
+An app-only image at `0x10000` leaves the stock 1 MB partition table intact and can cause a
+black-screen boot loop (`Image length 2372128 doesn't fit in partition length 1048576`).
+Recover with the matching factory image at **0x0**. See [which file and how](docs/release-flashing.md).
 What changed in each version: [CHANGELOG.md](CHANGELOG.md).
 
 ## Build & flash
 
 ```bash
 ls /dev/cu.*                                                   # find the port (the number changes between plugs)
-~/.platformio/penv/bin/pio run -e esp32dev -t upload --upload-port /dev/cu.usbserial-XXXX
+~/.platformio/penv/bin/pio run -e cyd-noinvert-spi40 -t upload --upload-port /dev/cu.usbserial-XXXX
 ~/.platformio/penv/bin/pio device monitor                       # 115200
 ```
-- `esp32dev` = a panel that needs color inversion (the original board)
-- `cyd-noinvert` = a panel with normal colors (if colors look inverted, switch env)
+`pio run -t upload` writes the bootloader, partition table and app together, so it is safe on a fresh board.
+Don't flash `.pio/build/<env>/firmware.bin` alone at 0x10000: that is app-only (see above).
+
+- `cyd-noinvert-spi40` = ILI9341, TPM408-2.8 / H1954 5-4 (start here).
+- `cyd-st7789-spi40` = ST7789, H685.
+- `esp32dev` = ILI9341 with inverted colours at 80 MHz; use inversion only for negative colours, or tap SETUP → COLORS.
 - **Touch off / missing taps?** Press the board's **BOOT** button once while REDLINE runs: tap the 4 red crosses,
   check the dots land under your finger, then **SAVE** (kept in flash; `touchcal=reset` undoes it, serial `touchcal`
   opens it too). Build-time defaults: `-D TOUCH_CAL_XMIN/XMAX/YMIN/YMAX/AXIS` in `platformio.ini`.
